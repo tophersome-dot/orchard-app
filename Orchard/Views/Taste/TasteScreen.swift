@@ -135,7 +135,7 @@ struct TasteScreen: View {
         .frame(height: 210)
         .frame(maxWidth: .infinity)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(OrchardColor.grassDeep, lineWidth: 3))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.black.opacity(0.08), lineWidth: 1))
     }
 
     private var varietyButton: some View {
@@ -154,7 +154,7 @@ struct TasteScreen: View {
             }
             .padding(14)
             .background(OrchardColor.cream, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(OrchardColor.grassDeep, lineWidth: 3))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.black.opacity(0.08), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }

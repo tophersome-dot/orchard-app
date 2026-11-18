@@ -181,6 +181,32 @@ final class Tasting {
 }
 
 @Model
+final class FarmPlacement {
+    var id: UUID
+    var kindRaw: String
+    var varietySlug: String?
+    var column: Int
+    var row: Int
+
+    init(id: UUID, kindRaw: String, varietySlug: String?, column: Int, row: Int) {
+        self.id = id
+        self.kindRaw = kindRaw
+        self.varietySlug = varietySlug
+        self.column = column
+        self.row = row
+    }
+
+    var record: FarmRecord {
+        FarmRecord(
+            id: id,
+            kind: FarmItemKind(rawValue: kindRaw) ?? .path,
+            varietyID: varietySlug,
+            tile: FarmTile(column: column, row: row)
+        )
+    }
+}
+
+@Model
 final class HuntItem {
     var id: UUID
     var addedAt: Date

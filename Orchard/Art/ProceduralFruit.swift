@@ -276,7 +276,11 @@ struct FruitGlyph: View {
     var skin: FruitSkin
 
     var body: some View {
-        if let id, let image = VarietyArt.fruitImage(id: id) {
+        if let id, let image = FarmSprite.image(named: FarmSprite.fruit(varietyID: id)) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+        } else if let id, let image = VarietyArt.fruitImage(id: id) {
             Image(uiImage: image)
                 .resizable()
                 .scaledToFit()

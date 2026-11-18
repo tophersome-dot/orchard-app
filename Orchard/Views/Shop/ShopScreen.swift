@@ -82,7 +82,7 @@ struct ShopScreen: View {
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(OrchardColor.grass, lineWidth: 2)
+                .stroke(OrchardColor.grassDeep.opacity(0.35), lineWidth: 1)
         )
     }
 

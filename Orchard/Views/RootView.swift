@@ -53,37 +53,32 @@ struct OrchardTabBar: View {
     @Binding var selection: AppTab
 
     var body: some View {
-        HStack {
-            item(.farm, title: "Farm", symbol: "tree.fill")
-            item(.taste, title: "Taste", symbol: "apple.logo")
-            item(.shop, title: "Shop", symbol: "basket.fill")
-            item(.collection, title: "Collection", symbol: "book.fill")
+        HStack(spacing: 0) {
+            item(.farm, title: "Farm", symbol: "house")
+            item(.taste, title: "Taste", symbol: "fork.knife")
+            item(.shop, title: "Shop", symbol: "basket")
+            item(.collection, title: "Collection", symbol: "book")
         }
-        .padding(.horizontal, 8)
         .padding(.top, 8)
-        .padding(.bottom, 6)
-        .background(OrchardColor.cream)
-        .overlay(alignment: .top) {
-            Rectangle().fill(OrchardColor.grassDeep).frame(height: 3)
-        }
+        .padding(.bottom, 4)
+        .background(.ultraThinMaterial)
     }
 
     private func item(_ tab: AppTab, title: String, symbol: String) -> some View {
-        Button {
+        let active = selection == tab
+        return Button {
             selection = tab
         } label: {
-            VStack(spacing: 2) {
+            VStack(spacing: 3) {
                 Image(systemName: symbol)
-                    .font(.system(size: 18, weight: .bold))
-                    .frame(width: 36, height: 28)
-                    .background(selection == tab ? OrchardColor.grass : Color.clear, in: Capsule())
+                    .font(.system(size: 18, weight: .light))
                 Text(title)
-                    .font(OrchardFont.caption(11))
+                    .font(.system(size: 10, weight: .medium))
             }
-            .foregroundStyle(selection == tab ? OrchardColor.ink : OrchardColor.grassDeep.opacity(0.7))
+            .foregroundStyle(active ? OrchardColor.grassDeep : Color.black.opacity(0.42))
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
-        .accessibilityAddTraits(selection == tab ? .isSelected : [])
+        .accessibilityAddTraits(active ? .isSelected : [])
     }
 }

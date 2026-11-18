@@ -69,9 +69,9 @@ struct CollectionScreen: View {
                                 .font(OrchardFont.body(14))
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
-                                .foregroundStyle(OrchardColor.ink)
-                                .background(category == raw ? OrchardColor.grass : OrchardColor.cream, in: Capsule())
-                                .overlay(Capsule().stroke(OrchardColor.grassDeep, lineWidth: 2))
+                                .foregroundStyle(category == raw ? Color.white : OrchardColor.ink)
+                                .background(category == raw ? OrchardColor.grassDeep : Color.white, in: Capsule())
+                                .overlay(Capsule().stroke(Color.black.opacity(0.08), lineWidth: 1))
                         }
                         .buttonStyle(.plain)
                     }
@@ -163,10 +163,10 @@ struct CollectionScreen: View {
         }
         .padding(8)
         .frame(maxWidth: .infinity)
-        .background(OrchardColor.cream, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(tried ? OrchardColor.grassDeep : OrchardColor.grassDeep.opacity(0.35), lineWidth: 2)
+                .stroke(Color.black.opacity(tried ? 0.1 : 0.05), lineWidth: 1)
         )
     }
 }

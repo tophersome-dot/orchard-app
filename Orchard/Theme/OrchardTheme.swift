@@ -21,7 +21,7 @@ enum OrchardColor {
     static let mid = Color(red: 0.96, green: 0.62, blue: 0.05)
     static let bad = Color(red: 0.90, green: 0.18, blue: 0.16)
     static let leaf = Color(red: 0.18, green: 0.66, blue: 0.16)
-    static let mint = Color(red: 0.94, green: 0.98, blue: 0.90)
+    static let mint = Color(red: 0.96, green: 0.97, blue: 0.96)
     static let sun = Color(red: 1.0, green: 0.82, blue: 0.16)
     static let sky = Color(red: 0.22, green: 0.74, blue: 0.96)
 
@@ -34,19 +34,19 @@ enum OrchardColor {
 
 enum OrchardFont {
     static func display(_ size: CGFloat) -> Font {
-        .system(size: size, weight: .heavy, design: .rounded)
+        .system(size: size, weight: .semibold, design: .default)
     }
 
     static func title(_ size: CGFloat) -> Font {
-        .system(size: size, weight: .bold, design: .rounded)
+        .system(size: size, weight: .semibold, design: .default)
     }
 
     static func body(_ size: CGFloat) -> Font {
-        .system(size: size, weight: .semibold, design: .rounded)
+        .system(size: size, weight: .regular, design: .default)
     }
 
     static func caption(_ size: CGFloat) -> Font {
-        .system(size: size, weight: .medium, design: .rounded)
+        .system(size: size, weight: .medium, design: .default)
     }
 }
 
@@ -87,10 +87,10 @@ struct OrchardCard: ViewModifier {
     func body(content: Content) -> some View {
         content
             .padding(14)
-            .background(OrchardColor.cream, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(OrchardColor.grassDeep, lineWidth: 3)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.black.opacity(0.08), lineWidth: 1)
             )
     }
 }

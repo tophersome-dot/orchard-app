@@ -1,6 +1,6 @@
 # Orchard
 
-Orchard is a personal iPhone app for tasting and remembering fruit and vegetables. Log a variety in a few taps and it is planted on a top-down farm. The rating changes the plant: loved fruit grows large and lush, middling fruit stays ordinary, and low scores wilt. There is no farmer or avatar. The farmhouse in the middle of the plot is the progression piece, and it upgrades as more distinct varieties are tasted.
+Orchard is a personal iPhone app for tasting and remembering fruit and vegetables. Log a variety and it is planted on an isometric farm you can pan, zoom, and rearrange. Loved plants scale up a little. A tree rated below 2.5 uses the wilting sprite. There is no farmer or avatar. The house upgrades as more distinct varieties are tasted, and locked plots open on the same count.
 
 The app is SwiftUI and SwiftData, iOS 17 or later, fully on device. There is no backend.
 
@@ -22,7 +22,7 @@ Final compile and any TestFlight upload happen on a Mac. This repository was pre
 
 The tab bar is Farm, Taste, Shop, and Collection. Shop is supermarket mode and is one tap from anywhere.
 
-- **Farm.** Scrollable plot with an orchard, ground beds, trellis, a lab greenhouse, a tractor, and the farmhouse. Tasted varieties appear as plants. Tap one for its card.
+- **Farm.** A tile map with a fenced orchard, soil beds, vine spots, the house, and the tractor. Pinch to zoom and drag to pan. Plant it drops the variety on the next free matching spot. Edit lets you drag items, add picket fences and stone paths, and undo. Tap a plant for its card.
 - **Quick taste.** Searchable catalogue, or add a custom variety. Sweet, Tart, Crunch, and Juicy sliders, an overall score from 1 to 5 in half steps, notes, and an optional photo. Plant it saves the tasting and jumps back to the farm.
 - **Supermarket mode.** Opens on a large search field. Typed matches show a colour, the score, and a one-line note. Untasted matches are listed as "Not tried yet". With an empty field, the screen is the personal ranking of what has already been tasted.
 - **Collection.** Per-category log such as Apples 4 / 25. The denominator is the live catalogue for that category, including custom varieties, not a fixed target of 30. Tried varieties are in colour. The rest are faded chase tiles. The Hunt segment is the shopping list.
@@ -40,7 +40,7 @@ Thresholds live in `HouseRules.thresholds` in `Orchard/Logic/HouseProgress.swift
 | 8 | Farmhouse |
 | 15 | Homestead |
 
-A small sign under the house shows the current level and how many varieties are left until the next one. The tractor is decoration.
+The tractor starts beside the shed. Land plots are in `FarmExpansion.plots` in `Orchard/Logic/FarmExpansion.swift`: home is open immediately, east at 4 tasted varieties, south at 8, and the corner at 12. Locked plots are dashed outlines until then.
 
 ## Photos and stickers
 
@@ -98,17 +98,32 @@ The notes in the JSON point at the page used for that row. The main ones are:
 - **Greenstar** is listed from the APAL exporter directory, not from a current supermarket ranging guide.
 - **Kissabel** is included because an Adelaide Hills orchard grows it. National supermarket distribution was not confirmed.
 - **Dutch, purple, and yellow carrots, and cherry tomato**, are shop types, not single cultivars. Their facts are empty.
-- **Cotton Candy** is a novelty grape bred in California. Australian growing regions were not confirmed, so the regions list is empty. The greenhouse bed is where the app plants it, not a claim about how it is farmed.
+- **Cotton Candy** is a novelty grape bred in California. Australian growing regions were not confirmed, so the regions list is empty. The app plants it on a vine spot because it is a novelty grape, not because of a claim about how it is farmed.
 - Several skin colours are explicitly unverified in `skinNote`. Do not treat those hex values as botanical descriptions.
 
 ## Art
 
-Fruit, trees, beds, trellises, the greenhouse, the tractor, and each farmhouse stage are drawn in SwiftUI from the variety colour data. To replace a drawing later, add an image set to `Assets.xcassets`:
+Sprites are transparent PNGs in `Assets.xcassets`, one imageset per name. If an image is missing, the screen draws a simple stand-in. Fruit icons also still accept the older `variety-<id>` name.
 
-- `variety-<id>` replaces the fruit glyph (`variety-pink-lady`)
-- `plant-<id>` replaces the whole plant on the farm
+| Asset | Used for |
+| --- | --- |
+| `house_1_shed` | Shed, the starting house |
+| `house_2_cottage` | Cottage |
+| `house_3_farmhouse` | Farmhouse |
+| `house_4_homestead` | Homestead |
+| `tree_<category>_<varietyId>` | A tree, for example `tree_apple_pink-lady` |
+| `tree_wilting` | Any tree rated below 2.5 |
+| `tree_sapling` | An empty orchard spot |
+| `bed_empty` | An empty soil bed |
+| `bed_<varietyId>` | A planted bed, for example `bed_dutch-carrot` |
+| `vine_<varietyId>` | A trellis or greenhouse crop, for example `vine_cherry-tomato` |
+| `fence_picket_straight` | Picket fence |
+| `tractor` | Tractor |
+| `bush` | Scrub |
+| `rock` | Scrub |
+| `fruit_<varietyId>` | Collection, taste picker, and variety card, for example `fruit_fuji` |
 
-Until those assets exist, the procedural drawing is used.
+Categories in tree names are the catalogue values: `apple`, `pear`, `grape`, `tropical`, `vegetable`. Variety ids are the `id` field in `catalogue.json`, hyphens included.
 
 ## Tests
 
