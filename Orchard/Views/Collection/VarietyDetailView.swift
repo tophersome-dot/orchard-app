@@ -2,6 +2,10 @@ import SwiftData
 import SwiftUI
 import UIKit
 
+struct VarietyLink: Identifiable, Hashable {
+    var id: String
+}
+
 struct VarietyDetailView: View {
     var slug: String
     @Query(sort: \Variety.name) private var varieties: [Variety]
