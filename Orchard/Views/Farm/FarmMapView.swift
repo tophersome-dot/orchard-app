@@ -17,6 +17,7 @@ struct FarmMapView: View {
     var hover: FarmTile?
     var hoverValid: Bool
     var dragging: UUID?
+    var showsNames: Bool
 
     private var viewport: FarmViewport {
         FarmViewport.covering(FarmExpansion.boundsTiles(records: records, tastedCount: tastedCount))
@@ -80,9 +81,6 @@ struct FarmMapView: View {
             for tile in plot.bedSpots where !occupied.contains(tile) {
                 items.append(makeDrawable(id: "bed-\(tile.column)-\(tile.row)", tile: tile, depth: depth(tile), viewport: viewport, visual: .emptyBed))
             }
-            for tile in plot.vineSpots where !occupied.contains(tile) {
-                items.append(makeDrawable(id: "vine-\(tile.column)-\(tile.row)", tile: tile, depth: depth(tile) - 0.1, viewport: viewport, visual: .emptyVine))
-            }
         }
         for record in records {
             let tile = record.id == dragging ? (hover ?? record.tile) : record.tile
@@ -92,6 +90,7 @@ struct FarmMapView: View {
         return items.sorted { $0.depth < $1.depth }
     }
 
+    /// Painter's order: smaller column+row is farther up the screen and draws first.
     private func depth(_ tile: FarmTile) -> Double {
         Double(tile.column + tile.row)
     }
@@ -129,23 +128,23 @@ struct FarmMapView: View {
         )
     }
 
-    /// House is the largest object. Trees sit a little wider than a tile. Beds cover the soil diamond.
+    /// One tree, bed, or vine matches one tile. The house footprint is two tiles across.
     private func displayWidth(_ visual: MapVisual) -> CGFloat {
         switch visual {
-        case .house: 176
-        case .tractor: 136
-        case .fence: 100
+        case .house: IsoMap.tileWidth * 2
+        case .tractor: IsoMap.tileWidth
+        case .fence: 52
         case .path: IsoMap.tileWidth * 0.96
-        case .bush: 72
-        case .rock: 58
-        case .sapling: 44
-        case .emptyBed: 116
-        case .emptyVine: 14
+        case .bush: 46
+        case .rock: 40
+        case .sapling: 32
+        case .emptyBed: IsoMap.tileWidth
+        case .emptyVine: 0
         case .plant(let info):
             switch FarmExpansion.spotKind(zone: info.zone) {
-            case .tree: 112
-            case .bed: 120
-            case .vine: 118
+            case .tree: IsoMap.tileWidth
+            case .bed: IsoMap.tileWidth
+            case .vine: IsoMap.tileWidth * 0.92
             }
         }
     }
@@ -154,17 +153,17 @@ struct FarmMapView: View {
         if let name = spriteName(visual), let image = FarmSprite.image(named: name), image.size.width > 0 {
             return width * image.size.height / image.size.width
         }
-        switch visual {
-        case .house: 130
-        case .tractor: 84
-        case .fence: 58
+        return switch visual {
+        case .house: IsoMap.tileWidth * 1.4
+        case .tractor: IsoMap.tileWidth * 0.9
+        case .fence: 36
         case .path: IsoMap.tileHeight * 0.96
-        case .bush: 52
-        case .rock: 36
-        case .sapling: 64
-        case .emptyBed: 58
-        case .emptyVine: 40
-        case .plant: 110
+        case .bush: 32
+        case .rock: 28
+        case .sapling: 48
+        case .emptyBed: IsoMap.tileHeight
+        case .emptyVine: 0
+        case .plant: IsoMap.tileWidth
         }
     }
 
@@ -224,9 +223,7 @@ struct FarmMapView: View {
                 IsoDiamond().fill(OrchardColor.soil)
             }
         case .emptyVine:
-            RoundedRectangle(cornerRadius: 2)
-                .fill(OrchardColor.wood)
-                .frame(width: width, height: item.foot)
+            EmptyView()
         case .plant(let info):
             plantView(info, width: width, foot: item.foot)
         }
@@ -240,15 +237,17 @@ struct FarmMapView: View {
         }
         .scaleEffect(scale, anchor: .bottom)
         .overlay(alignment: .bottom) {
-            Text(info.name)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(OrchardColor.ink)
-                .lineLimit(1)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(.ultraThinMaterial, in: Capsule())
-                .fixedSize()
-                .offset(y: 16)
+            if showsNames {
+                Text(info.name)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(OrchardColor.ink)
+                    .lineLimit(1)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .fixedSize()
+                    .offset(y: 16)
+            }
         }
     }
 

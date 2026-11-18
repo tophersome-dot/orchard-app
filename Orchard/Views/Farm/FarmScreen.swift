@@ -73,7 +73,8 @@ struct FarmScreen: View {
                     tastedCount: tastedCount,
                     hover: hover,
                     hoverValid: hoverValid,
-                    dragging: dragging
+                    dragging: dragging,
+                    showsNames: scale >= 1.25
                 )
                 .scaleEffect(scale, anchor: .center)
                 .position(x: geo.size.width / 2 + offset.width, y: geo.size.height / 2 + offset.height)
@@ -265,13 +266,22 @@ struct FarmScreen: View {
         var occupied = Set(records.map(\.tile))
         occupied.remove(record.tile)
         let spot = record.varietyID.flatMap { plants[$0] }.map { FarmExpansion.spotKind(zone: $0.zone) }
-        return FarmExpansion.canPlace(kind: record.kind, spot: spot, on: tile, tastedCount: tastedCount, occupied: occupied)
+        let reserved = FarmExpansion.reservedTiles(in: records, ignoring: record.id)
+        return FarmExpansion.canPlace(
+            kind: record.kind,
+            spot: spot,
+            on: tile,
+            tastedCount: tastedCount,
+            occupied: occupied,
+            reserved: reserved
+        )
     }
 
     private func placeTool(at tile: FarmTile) {
         let kind: FarmItemKind = tool == .fence ? .fence : .path
         let occupied = Set(records.map(\.tile))
-        guard FarmExpansion.canPlace(kind: kind, spot: nil, on: tile, tastedCount: tastedCount, occupied: occupied) else { return }
+        let reserved = FarmExpansion.reservedTiles(in: records)
+        guard FarmExpansion.canPlace(kind: kind, spot: nil, on: tile, tastedCount: tastedCount, occupied: occupied, reserved: reserved) else { return }
         commit { records in
             records.append(FarmRecord(id: UUID(), kind: kind, varietyID: nil, tile: tile))
         }
@@ -290,14 +300,21 @@ struct FarmScreen: View {
     }
 
     private func frameHouse(in viewSize: CGSize) {
-        guard !framed else { return }
+        guard !framed, viewSize.width > 1, viewSize.height > 1 else { return }
         framed = true
-        let house = records.first { $0.kind == .house }?.tile ?? FarmTile(column: 7, row: 2)
-        let viewport = FarmViewport.covering(FarmExpansion.boundsTiles(records: records, tastedCount: tastedCount))
-        let point = viewport.viewPoint(house)
-        let contentCenter = CGPoint(x: viewport.size.width / 2, y: viewport.size.height / 2)
-        offset = CGSize(width: (contentCenter.x - point.x) * scale, height: (contentCenter.y - point.y) * scale)
+        let map = FarmViewport.covering(FarmExpansion.boundsTiles(records: records, tastedCount: tastedCount))
+        let focus = FarmExpansion.starterFocusTiles().map { map.viewPoint($0) }
+        guard let minX = focus.map(\.x).min(),
+              let maxX = focus.map(\.x).max(),
+              let minY = focus.map(\.y).min(),
+              let maxY = focus.map(\.y).max() else { return }
+        let box = CGRect(x: minX - 36, y: minY - IsoMap.tileWidth, width: (maxX - minX) + 72, height: (maxY - minY) + IsoMap.tileWidth + 48)
+        let fitted = min((viewSize.width - 28) / box.width, (viewSize.height - 110) / box.height)
+        scale = min(1.2, max(0.45, fitted))
+        lastScale = scale
+        let boxCenter = CGPoint(x: box.midX, y: box.midY)
+        let mapCenter = CGPoint(x: map.size.width / 2, y: map.size.height / 2)
+        offset = CGSize(width: (mapCenter.x - boxCenter.x) * scale, height: (mapCenter.y - boxCenter.y) * scale)
         lastOffset = offset
-        _ = viewSize
     }
 }

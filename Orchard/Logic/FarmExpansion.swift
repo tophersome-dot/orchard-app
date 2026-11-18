@@ -113,8 +113,34 @@ enum FarmExpansion {
         unlockedPlots(tastedCount: tastedCount).flatMap { $0.spots(kind) }
     }
 
+    /// Front tile of the house. The other three tiles of its 2×2 footprint sit behind it.
+    static let houseAnchor = FarmTile(column: 7, row: 2)
+    /// Kept clear of the house so the tractor is not drawn on top of it.
+    static let tractorTile = FarmTile(column: 9, row: 0)
+    /// Positions written by the first starter layout, before the tractor had its own tile.
+    static let legacyTractorTile = FarmTile(column: 8, row: 3)
+
+    static func footprint(kind: FarmItemKind, anchor: FarmTile) -> [FarmTile] {
+        guard kind == .house else { return [anchor] }
+        return [
+            anchor,
+            FarmTile(column: anchor.column - 1, row: anchor.row),
+            FarmTile(column: anchor.column, row: anchor.row - 1),
+            FarmTile(column: anchor.column - 1, row: anchor.row - 1)
+        ]
+    }
+
+    static func reservedTiles(in records: [FarmRecord], ignoring: UUID? = nil) -> Set<FarmTile> {
+        var tiles = Set<FarmTile>()
+        for record in records where record.id != ignoring && (record.kind == .house || record.kind == .tractor) {
+            tiles.formUnion(footprint(kind: record.kind, anchor: record.tile))
+        }
+        return tiles
+    }
+
     static func nextFreeSpot(kind: FarmSpotKind, tastedCount: Int, occupied: Set<FarmTile>) -> FarmTile? {
-        spots(kind: kind, tastedCount: tastedCount).first { !occupied.contains($0) }
+        let reserved = occupied
+        return spots(kind: kind, tastedCount: tastedCount).first { !reserved.contains($0) }
     }
 
     static func canPlace(
@@ -122,26 +148,52 @@ enum FarmExpansion {
         spot: FarmSpotKind?,
         on tile: FarmTile,
         tastedCount: Int,
-        occupied: Set<FarmTile>
+        occupied: Set<FarmTile>,
+        reserved: Set<FarmTile> = []
     ) -> Bool {
-        if occupied.contains(tile) || isLocked(tile, tastedCount: tastedCount) {
+        if kind == .house {
+            let tiles = footprint(kind: .house, anchor: tile)
+            return tiles.allSatisfy { candidate in
+                !occupied.contains(candidate) && !reserved.contains(candidate) && !isLocked(candidate, tastedCount: tastedCount)
+            }
+        }
+        if occupied.contains(tile) || reserved.contains(tile) || isLocked(tile, tastedCount: tastedCount) {
             return false
         }
         switch kind {
         case .plant:
             guard let spot else { return false }
             return spots(kind: spot, tastedCount: tastedCount).contains(tile)
-        case .house, .tractor, .fence, .path, .bush, .rock:
+        case .tractor, .fence, .path, .bush, .rock:
+            return true
+        case .house:
             return true
         }
+    }
+
+    /// Tiles that should fill the opening camera: the fenced orchard, beds, house, and tractor.
+    static func starterFocusTiles() -> [FarmTile] {
+        var tiles = footprint(kind: .house, anchor: houseAnchor)
+        tiles.append(tractorTile)
+        guard let home = plots.first else { return tiles }
+        tiles.append(contentsOf: home.treeSpots + home.bedSpots + home.vineSpots)
+        for column in 1...5 {
+            tiles.append(FarmTile(column: column, row: 1))
+            tiles.append(FarmTile(column: column, row: 5))
+        }
+        for row in 2...4 {
+            tiles.append(FarmTile(column: 1, row: row))
+            tiles.append(FarmTile(column: 5, row: row))
+        }
+        return tiles
     }
 
     /// House, tractor, the home-paddock fence, a short path, and a little scrub.
     /// Plants are added later, when a variety is tasted.
     static func starterRecords() -> [FarmRecord] {
         var records: [FarmRecord] = [
-            FarmRecord(id: UUID(), kind: .house, varietyID: nil, tile: FarmTile(column: 7, row: 2)),
-            FarmRecord(id: UUID(), kind: .tractor, varietyID: nil, tile: FarmTile(column: 8, row: 3))
+            FarmRecord(id: UUID(), kind: .house, varietyID: nil, tile: houseAnchor),
+            FarmRecord(id: UUID(), kind: .tractor, varietyID: nil, tile: tractorTile)
         ]
         for column in 1...5 {
             for row in 1...5 where column == 1 || column == 5 || row == 1 || row == 5 {
@@ -168,6 +220,10 @@ enum FarmExpansion {
         }
         if next.isEmpty {
             next = starterRecords()
+        }
+        if let tractorIndex = next.firstIndex(where: { $0.kind == .tractor && $0.tile == legacyTractorTile }),
+           next.contains(where: { $0.kind == .house && $0.tile == houseAnchor }) {
+            next[tractorIndex].tile = tractorTile
         }
         var occupied = Set(next.map(\.tile))
         for item in tried where !next.contains(where: { $0.kind == .plant && $0.varietyID == item.id }) {

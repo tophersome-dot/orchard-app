@@ -68,6 +68,17 @@ final class FarmExpansionTests: XCTestCase {
         XCTAssertEqual(Double(FarmSprite.scale(for: 3)), 1, accuracy: 0.001)
     }
 
+    func testLegacyTractorMovesOffTheHouse() {
+        let records = [
+            FarmRecord(id: UUID(), kind: .house, varietyID: nil, tile: FarmExpansion.houseAnchor),
+            FarmRecord(id: UUID(), kind: .tractor, varietyID: nil, tile: FarmExpansion.legacyTractorTile)
+        ]
+        let fixed = FarmExpansion.reconciled(records, tried: [], tastedCount: 0)
+        XCTAssertEqual(fixed.first { $0.kind == .tractor }?.tile, FarmExpansion.tractorTile)
+        let footprint = Set(FarmExpansion.footprint(kind: .house, anchor: FarmExpansion.houseAnchor))
+        XCTAssertFalse(footprint.contains(FarmExpansion.tractorTile))
+    }
+
     func testIsoCenterRoundTrips() {
         let tile = FarmTile(column: 7, row: 2)
         XCTAssertEqual(IsoMap.tile(at: IsoMap.center(tile)), tile)
