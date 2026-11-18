@@ -3,7 +3,6 @@ import SwiftUI
 
 struct RootView: View {
     @ObservedObject private var router = AppRouter.shared
-    @Environment(\.modelContext) private var context
     @State private var seedError: String?
 
     var body: some View {
@@ -24,11 +23,11 @@ struct RootView: View {
             OrchardTabBar(selection: Binding(get: { router.tab }, set: { router.tab = $0 }))
         }
         .task {
+            // Let the empty farm (shed, tractor, plots) commit before any store work.
+            await Task.yield()
             do {
-                try CatalogueSeeder.sync(context)
-                if DebugLaunch.seedSampleTastings {
-                    try SampleTastings.seed(context)
-                }
+                let importer = CatalogueImporter(modelContainer: OrchardStore.container)
+                try await importer.importSeed(includeSamples: DebugLaunch.seedSampleTastings)
             } catch {
                 seedError = error.localizedDescription
             }

@@ -71,6 +71,7 @@ struct FarmScreen: View {
     private var plot: some View {
         ZStack {
             FarmGround(layout: layout)
+                .equatable()
             FarmhouseArt(tier: HouseRules.progress(for: tastedCount).tier)
                 .position(layout.house)
                 .id("farmhouse")

@@ -12,6 +12,17 @@ enum SeedError: LocalizedError {
     }
 }
 
+/// Imports the bundled catalogue away from the main actor so the first farm frame can draw.
+@ModelActor
+actor CatalogueImporter {
+    func importSeed(includeSamples: Bool) throws {
+        try CatalogueSeeder.sync(modelContext)
+        if includeSamples {
+            try SampleTastings.seed(modelContext)
+        }
+    }
+}
+
 enum CatalogueSeeder {
     /// Inserts catalogue rows and refreshes factual fields from the bundled JSON.
     /// Tastings, hunt items and custom varieties are left alone. Removed JSON rows are not deleted.

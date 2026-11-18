@@ -1,65 +1,65 @@
 import SwiftUI
 
-struct FarmGround: View {
+struct FarmGround: View, Equatable {
     var layout: PlotLayout
 
+    static func == (lhs: FarmGround, rhs: FarmGround) -> Bool {
+        lhs.layout == rhs.layout
+    }
+
     var body: some View {
-        Canvas { context, size in
-            context.fill(
-                Path(CGRect(origin: .zero, size: size)),
-                with: .linearGradient(
-                    Gradient(colors: [OrchardColor.grass, OrchardColor.grassDark]),
-                    startPoint: CGPoint(x: 0, y: 0),
-                    endPoint: CGPoint(x: size.width, y: size.height)
+        let bedHeight = max(180, layout.greenhouse.y - layout.house.y - 220)
+        ZStack {
+            LinearGradient(
+                colors: [OrchardColor.grass, OrchardColor.grassDark],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            DirtPath(house: layout.house)
+                .stroke(OrchardColor.pathEdge, style: StrokeStyle(lineWidth: 44, lineCap: .round))
+            DirtPath(house: layout.house)
+                .stroke(OrchardColor.path, style: StrokeStyle(lineWidth: 28, lineCap: .round))
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(OrchardColor.soil)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .stroke(OrchardColor.soilDark, lineWidth: 6)
                 )
-            )
-            var rng = SeededRNG(seed: 42)
-            for _ in 0..<90 {
-                let x = CGFloat(rng.next()) * size.width
-                let y = CGFloat(rng.next()) * size.height
-                var tuft = Path()
-                tuft.move(to: CGPoint(x: x, y: y))
-                tuft.addQuadCurve(to: CGPoint(x: x + 8, y: y - 10), control: CGPoint(x: x + 2, y: y - 8))
-                context.stroke(tuft, with: .color(OrchardColor.grassDeep.opacity(0.35)), lineWidth: 2)
-            }
-            for index in 0..<28 {
-                let x = CGFloat(rng.next()) * size.width
-                let y = CGFloat(rng.next()) * size.height
-                let color: Color = index % 3 == 0 ? OrchardColor.sun : (index % 3 == 1 ? Color.white : Color(red: 1, green: 0.45, blue: 0.55))
-                context.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 7, height: 7)), with: .color(color.opacity(0.9)))
-            }
-
-            var path = Path()
-            path.move(to: CGPoint(x: size.width * 0.5, y: size.height - 10))
-            path.addCurve(
-                to: layout.house,
-                control1: CGPoint(x: size.width * 0.62, y: size.height * 0.72),
-                control2: CGPoint(x: layout.house.x + 30, y: layout.house.y + 180)
-            )
-            context.stroke(
-                path,
-                with: .color(OrchardColor.path),
-                style: StrokeStyle(lineWidth: 54, lineCap: .round)
-            )
-            context.stroke(
-                path,
-                with: .color(OrchardColor.pathEdge.opacity(0.7)),
-                style: StrokeStyle(lineWidth: 58, lineCap: .round)
-            )
-            context.stroke(
-                path,
-                with: .color(OrchardColor.path),
-                style: StrokeStyle(lineWidth: 46, lineCap: .round)
-            )
-
-            let bed = CGRect(x: 40, y: layout.house.y + 180, width: 390, height: max(180, layout.greenhouse.y - layout.house.y - 220))
-            if bed.height > 40 {
-                let bedPath = Path(roundedRect: bed, cornerRadius: 28)
-                context.fill(bedPath, with: .color(OrchardColor.soil))
-                context.stroke(bedPath, with: .color(OrchardColor.soilDark), lineWidth: 6)
-            }
+                .frame(width: 390, height: bedHeight)
+                .position(x: 235, y: layout.house.y + 180 + bedHeight / 2)
+            GroundSpeckles()
         }
         .frame(width: layout.canvas.width, height: layout.canvas.height)
+    }
+}
+
+private struct DirtPath: Shape {
+    var house: CGPoint
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.maxY - 10))
+        path.addCurve(
+            to: house,
+            control1: CGPoint(x: rect.width * 0.62, y: rect.height * 0.72),
+            control2: CGPoint(x: house.x + 30, y: house.y + 180)
+        )
+        return path
+    }
+}
+
+private struct GroundSpeckles: View {
+    var body: some View {
+        Canvas { context, size in
+            var rng = SeededRNG(seed: 42)
+            for index in 0..<16 {
+                let x = CGFloat(rng.next()) * size.width
+                let y = CGFloat(rng.next()) * size.height
+                let color: Color = index % 3 == 0 ? OrchardColor.sun : (index % 3 == 1 ? .white : Color(red: 1, green: 0.45, blue: 0.55))
+                context.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 7, height: 7)), with: .color(color))
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 
