@@ -23,9 +23,9 @@ struct RootView: View {
             OrchardTabBar(selection: Binding(get: { router.tab }, set: { router.tab = $0 }))
         }
         .task {
-            // Let the grass commit before the catalogue import touches the store.
-            await Task.yield()
-            await Task.yield()
+            // The farm paints from the store that is already on disk. Catalogue refresh waits
+            // so it does not lock that store during the first frames.
+            try? await Task.sleep(for: .milliseconds(1200))
             do {
                 let importer = CatalogueImporter(modelContainer: OrchardStore.container)
                 try await importer.importSeed(includeSamples: DebugLaunch.seedSampleTastings)

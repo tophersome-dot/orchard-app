@@ -73,7 +73,7 @@ struct YardPlan: Equatable {
 /// How the map grows. The orchard and the beds add rows as more of that kind are tasted.
 enum FarmExpansion {
     static let treeColumns = [2, 4, 6]
-    static let bedColumns = [2, 3, 4, 5]
+    static let bedColumns = [2, 4, 6, 8]
     static let vineColumns = [2, 4, 6, 8]
     /// Front tile of the house, in the yard beside the orchard.
     static let houseAnchor = FarmTile(column: 12, row: 4)
@@ -318,9 +318,24 @@ enum FarmExpansion {
         }
     }
 
+    /// Orchard corners, beds, vines, house, and tractor. The opening zoom fits this span.
+    static func openingFocusTiles(for plan: YardPlan) -> [FarmTile] {
+        var tiles = [
+            FarmTile(column: 0, row: 0),
+            FarmTile(column: 8, row: 0),
+            FarmTile(column: 0, row: plan.fenceBottom),
+            FarmTile(column: 8, row: plan.fenceBottom)
+        ]
+        tiles.append(contentsOf: plan.bedSpots)
+        tiles.append(contentsOf: plan.vineSpots)
+        tiles.append(contentsOf: footprint(kind: .house, anchor: houseAnchor))
+        tiles.append(tractorTile)
+        return tiles
+    }
+
     /// Tiles that should fill the opening camera.
     static func starterFocusTiles() -> [FarmTile] {
-        focusTiles(for: plan(treeCount: 0, bedCount: 0, vineCount: 0))
+        openingFocusTiles(for: plan(treeCount: 0, bedCount: 0, vineCount: 0))
     }
 
     static func focusTiles(for plan: YardPlan) -> [FarmTile] {

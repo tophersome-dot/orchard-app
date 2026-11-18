@@ -26,6 +26,7 @@ struct FarmScreen: View {
     @State private var lastScale: CGFloat = 1
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
+    @State private var worldCenter: CGPoint = .zero
     @State private var framed = false
     @State private var userMoved = false
     @State private var scenery = false
@@ -68,14 +69,25 @@ struct FarmScreen: View {
     }
 
     private var yardPlan: YardPlan {
-        let zones = Dictionary(uniqueKeysWithValues: plants.map { ($0.key, $0.value.zone) })
+        var zones: [String: String] = [:]
+        for variety in varieties {
+            zones[variety.slug] = variety.zoneRaw
+        }
         return FarmExpansion.plan(records: records, zones: zones)
+    }
+
+    private var camera: FarmCamera {
+        FarmCamera(scale: scale, center: worldCenter, pan: offset)
+    }
+
+    private func resolvedCamera(in viewSize: CGSize) -> FarmCamera {
+        framed ? camera : fittedCamera(in: viewSize)
     }
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                Color(red: 0.51, green: 0.63, blue: 0.10)
+                FarmColor.freshGrass
                 FarmMapView(
                     records: displayRecords,
                     plants: plants,
@@ -84,10 +96,10 @@ struct FarmScreen: View {
                     hoverValid: hoverValid,
                     dragging: dragging,
                     showsNames: scale >= 1.25,
-                    detailed: scenery
+                    detailed: scenery,
+                    camera: resolvedCamera(in: geo.size),
+                    canvasSize: geo.size
                 )
-                .scaleEffect(scale, anchor: .center)
-                .position(x: geo.size.width / 2 + offset.width, y: geo.size.height / 2 + offset.height)
             }
             .contentShape(Rectangle())
             .gesture(drag(in: geo.size))
@@ -101,16 +113,17 @@ struct FarmScreen: View {
             VarietyDetailView(slug: link.id)
         }
         .task(id: triedSignature) {
-            // Paint the grass before any sprite decode or yard rebuild.
+            // The grass frame commits before any PNG decode or store rewrite.
             await Task.yield()
+            await FarmSprite.warm(spritesToWarm())
             if !scenery {
                 scenery = true
-                if !userMoved {
-                    framed = false
-                    frameRequest += 1
-                }
-                await Task.yield()
             }
+            if !userMoved {
+                framed = false
+                frameRequest += 1
+            }
+            await Task.yield()
             guard !varieties.isEmpty else { return }
             let tried = varieties.filter(\.isTried).map { (id: $0.slug, zone: $0.zoneRaw) }
             try? FarmLayout.sync(context: context, tried: tried)
@@ -256,31 +269,34 @@ struct FarmScreen: View {
     }
 
     private func tile(at location: CGPoint, in viewSize: CGSize) -> FarmTile {
-        let viewport = mapViewport
-        let visualCenter = CGPoint(x: viewSize.width / 2 + offset.width, y: viewSize.height / 2 + offset.height)
-        let content = CGPoint(
-            x: viewport.size.width / 2 + (location.x - visualCenter.x) / scale,
-            y: viewport.size.height / 2 + (location.y - visualCenter.y) / scale
-        )
-        return viewport.tile(at: content)
-    }
-
-    private var mapViewport: FarmViewport {
-        FarmViewport.covering(FarmExpansion.boundsTiles(records: records, tastedCount: tastedCount, plan: yardPlan))
+        IsoMap.tile(at: resolvedCamera(in: viewSize).worldPoint(location, in: viewSize))
     }
 
     private func item(at location: CGPoint, in viewSize: CGSize) -> FarmRecord? {
-        let viewport = mapViewport
-        let visualCenter = CGPoint(x: viewSize.width / 2 + offset.width, y: viewSize.height / 2 + offset.height)
-        let content = CGPoint(
-            x: viewport.size.width / 2 + (location.x - visualCenter.x) / scale,
-            y: viewport.size.height / 2 + (location.y - visualCenter.y) / scale
-        )
+        let view = resolvedCamera(in: viewSize)
         let hit = records.min { lhs, rhs in
-            distance(viewport.viewPoint(lhs.tile), content) < distance(viewport.viewPoint(rhs.tile), content)
+            distance(view.screenPoint(IsoMap.center(lhs.tile), in: viewSize), location)
+                < distance(view.screenPoint(IsoMap.center(rhs.tile), in: viewSize), location)
         }
-        guard let hit, distance(viewport.viewPoint(hit.tile), content) < 48 else { return nil }
+        guard let hit, distance(view.screenPoint(IsoMap.center(hit.tile), in: viewSize), location) < 44 else { return nil }
         return hit
+    }
+
+    private func spritesToWarm() -> [String] {
+        var names = [
+            FarmSprite.grass, FarmSprite.fence, FarmSprite.tractor, FarmSprite.bush, FarmSprite.rock,
+            FarmSprite.sapling, FarmSprite.soilTree, FarmSprite.soilVine, FarmSprite.emptyBed, FarmSprite.stonePath,
+            FarmSprite.house(HouseRules.progress(for: tastedCount).tier)
+        ]
+        for variety in varieties where variety.isTried {
+            names.append(FarmSprite.plantName(
+                zone: variety.zoneRaw,
+                category: variety.categoryRaw,
+                varietyID: variety.slug,
+                rating: variety.latestTasting?.overall
+            ))
+        }
+        return names
     }
 
     private func plantSlug(at location: CGPoint, in viewSize: CGSize) -> String? {
@@ -331,26 +347,30 @@ struct FarmScreen: View {
         try? FarmLayout.write(previous, in: context)
     }
 
-    private func frameHouse(in viewSize: CGSize) {
-        guard !framed, viewSize.width > 1, viewSize.height > 1 else { return }
-        framed = true
-        let map = mapViewport
-        let focus = FarmExpansion.focusTiles(for: yardPlan).map { map.viewPoint($0) }
-        guard let minX = focus.map(\.x).min(),
+    private func fittedCamera(in viewSize: CGSize) -> FarmCamera {
+        let focus = FarmExpansion.openingFocusTiles(for: yardPlan).map { IsoMap.center($0) }
+        guard viewSize.width > 1,
+              let minX = focus.map(\.x).min(),
               let maxX = focus.map(\.x).max(),
               let minY = focus.map(\.y).min(),
-              let maxY = focus.map(\.y).max() else { return }
-        let box = CGRect(
-            x: minX - IsoMap.tileWidth * 0.2,
-            y: minY - IsoMap.tileWidth,
-            width: (maxX - minX) + IsoMap.tileWidth * 0.5,
-            height: (maxY - minY) + IsoMap.tileWidth * 1.15
-        )
-        scale = min(1.35, (viewSize.width * 0.85) / box.width)
-        lastScale = scale
-        let boxCenter = CGPoint(x: box.midX, y: box.midY)
-        let mapCenter = CGPoint(x: map.size.width / 2, y: map.size.height / 2)
-        offset = CGSize(width: (mapCenter.x - boxCenter.x) * scale, height: (mapCenter.y - boxCenter.y) * scale)
-        lastOffset = offset
+              let maxY = focus.map(\.y).max() else {
+            return FarmCamera(scale: 1, center: .zero, pan: .zero)
+        }
+        let span = max(maxX - minX, 1)
+        let padded = span + IsoMap.tileWidth * 2.2
+        let fitted = min(1.6, (viewSize.width * 0.90) / padded)
+        let center = CGPoint(x: (minX + maxX) / 2, y: (minY + maxY) / 2 - IsoMap.tileHeight * 0.6)
+        return FarmCamera(scale: fitted, center: center, pan: .zero)
+    }
+
+    private func frameHouse(in viewSize: CGSize) {
+        guard !framed, viewSize.width > 1, viewSize.height > 1 else { return }
+        let fitted = fittedCamera(in: viewSize)
+        framed = true
+        scale = fitted.scale
+        lastScale = fitted.scale
+        worldCenter = fitted.center
+        offset = .zero
+        lastOffset = .zero
     }
 }

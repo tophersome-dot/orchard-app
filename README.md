@@ -60,7 +60,7 @@ xcrun simctl launch booted com.chrismartin.orchard -seedSampleTastings -openScre
 
 `-seedSampleTastings` inserts fictional tastings for varieties that have none, so the farm, supermarket list, and collection have something to screenshot. They are not a real tasting notebook. Delete them from a variety card if you want them gone. A variety you have already tasted is left alone.
 
-The catalogue import runs on a background SwiftData actor after the first frame. On a fresh install the farm shows the shed, tractor and empty plots immediately, then the seeded plants appear.
+The grass paints first. Sprite images are decoded off the main thread, then the plants appear. The catalogue import runs on a background SwiftData actor after that, so it does not hold the store during the opening frames. On a fresh install the farm shows the shed, tractor and empty plots, then the seeded plants.
 
 ## Catalogue
 

@@ -1,5 +1,7 @@
 import UIKit
 
+private let spriteLock = NSLock()
+
 /// Asset catalog names for the isometric farm sprites.
 /// Drop a transparent PNG into an imageset with this exact name.
 /// Missing images fall back to the drawn views.
@@ -40,18 +42,53 @@ enum FarmSprite {
     static func fruit(varietyID: String) -> String { "fruit_\(varietyID)" }
 
     static func image(named name: String) -> UIImage? {
-        if let cached = images[name] { return cached }
+        spriteLock.lock()
+        let cached = images[name]
+        spriteLock.unlock()
+        if let cached { return cached }
         guard let image = UIImage(named: name) else { return nil }
+        store(image, named: name)
+        return image
+    }
+
+    /// Decodes sprites off the main thread so the first farm frame is not waiting on PNG inflation.
+    static func warm(_ names: [String]) async {
+        let pending = names.filter { name in
+            spriteLock.lock()
+            let have = images[name] != nil
+            spriteLock.unlock()
+            return !have
+        }
+        let unique = Array(Set(pending))
+        guard !unique.isEmpty else { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            DispatchQueue.global(qos: .userInitiated).async {
+                for name in unique {
+                    autoreleasepool {
+                        guard let image = UIImage(named: name)?.preparingForDisplay() else { return }
+                        store(image, named: name)
+                    }
+                }
+                continuation.resume()
+            }
+        }
+    }
+
+    private static func store(_ image: UIImage, named name: String) {
+        spriteLock.lock()
         images[name] = image
         if image.size.width > 0 {
             aspects[name] = image.size.height / image.size.width
         }
-        return image
+        spriteLock.unlock()
     }
 
     /// Height ÷ width. Nil until the image has been read once.
     static func aspect(named name: String) -> CGFloat? {
-        if let known = aspects[name] { return known }
+        spriteLock.lock()
+        let known = aspects[name]
+        spriteLock.unlock()
+        if let known { return known }
         guard let image = image(named: name), image.size.width > 0 else { return nil }
         return image.size.height / image.size.width
     }
