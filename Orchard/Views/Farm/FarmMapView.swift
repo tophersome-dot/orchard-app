@@ -200,7 +200,7 @@ struct FarmMapView: View {
     /// Sprite widths in world points, before the camera zoom. One tile is `IsoMap.tileWidth`.
     private func worldWidth(_ visual: MapVisual) -> CGFloat {
         let tile = IsoMap.tileWidth
-        switch visual {
+        return switch visual {
         case .house: tile * 2
         case .tractor: tile
         case .fence: fenceWidth
@@ -208,7 +208,7 @@ struct FarmMapView: View {
         case .bush: tile * 0.55
         case .rock: tile * 0.48
         case .sapling: tile * 0.43
-        case .soilTree: tile * 1.2
+        case .soilTree: tile
         case .soilVine, .soilBed: tile
         case .emptyVine: 0
         case .plant(let info):
