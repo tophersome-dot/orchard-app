@@ -18,11 +18,11 @@ final class FarmExpansionTests: XCTestCase {
         XCTAssertEqual(second, FarmTile(column: 4, row: 2))
         XCTAssertEqual(
             FarmExpansion.nextFreeSpot(kind: .bed, tastedCount: 0, occupied: []),
-            FarmTile(column: 2, row: 9)
+            FarmTile(column: 2, row: 8)
         )
         XCTAssertEqual(
             FarmExpansion.nextFreeSpot(kind: .vine, tastedCount: 0, occupied: []),
-            FarmTile(column: 2, row: 13)
+            FarmTile(column: 2, row: 11)
         )
         XCTAssertNil(FarmExpansion.nextFreeSpot(kind: .tree, tastedCount: 0, occupied: Set(FarmExpansion.spots(kind: .tree, tastedCount: 0))))
     }
@@ -41,7 +41,7 @@ final class FarmExpansionTests: XCTestCase {
 
     func testPlantsOnlySitOnTheirOwnSpots() {
         let tree = FarmTile(column: 2, row: 2)
-        let bed = FarmTile(column: 2, row: 9)
+        let bed = FarmTile(column: 2, row: 8)
         XCTAssertTrue(FarmExpansion.canPlace(kind: .plant, spot: .tree, on: tree, tastedCount: 0, occupied: []))
         XCTAssertFalse(FarmExpansion.canPlace(kind: .plant, spot: .tree, on: bed, tastedCount: 0, occupied: []))
         XCTAssertFalse(FarmExpansion.canPlace(kind: .plant, spot: .bed, on: tree, tastedCount: 0, occupied: []))
@@ -84,6 +84,28 @@ final class FarmExpansionTests: XCTestCase {
         XCTAssertTrue(fence.contains(FarmTile(column: 8, row: 6)))
         let footprint = Set(FarmExpansion.footprint(kind: .house, anchor: FarmExpansion.houseAnchor))
         XCTAssertFalse(footprint.contains(FarmExpansion.tractorTile))
+        XCTAssertTrue(fixed.contains { $0.kind == .fence && $0.varietyID == FarmSprite.fenceSide })
+    }
+
+    func testOrchardAndBedsGrowToFitEveryPlant() {
+        let trees = (0..<30).map { (id: "tree-\($0)", zone: "orchard") }
+        let planted = FarmExpansion.reconciled([], tried: trees, tastedCount: 30)
+        let treeTiles = planted.filter { $0.kind == .plant }.map(\.tile)
+        XCTAssertEqual(treeTiles.count, 30)
+        let columns = Set(planted.filter { $0.kind == .fence }.map(\.tile.column))
+        let left = columns.min() ?? 0
+        let right = columns.max() ?? 0
+        for tile in treeTiles {
+            XCTAssertGreaterThan(tile.column, left)
+            XCTAssertLessThan(tile.column, right)
+        }
+        XCTAssertTrue(treeTiles.contains(FarmTile(column: 2, row: 2)))
+        XCTAssertTrue(treeTiles.contains(FarmTile(column: 6, row: 20)))
+
+        let beds = (0..<5).map { (id: "bed-\($0)", zone: "bed") }
+        let bedTiles = FarmExpansion.reconciled([], tried: beds, tastedCount: 5).filter { $0.kind == .plant }.map(\.tile)
+        XCTAssertEqual(bedTiles.count, 5)
+        XCTAssertTrue(planted.contains { $0.kind == .tractor && $0.tile == FarmExpansion.tractorTile })
     }
 
     func testIsoCenterRoundTrips() {

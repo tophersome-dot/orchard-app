@@ -23,7 +23,8 @@ struct RootView: View {
             OrchardTabBar(selection: Binding(get: { router.tab }, set: { router.tab = $0 }))
         }
         .task {
-            // Let the empty farm (shed, tractor, plots) commit before any store work.
+            // Let the grass commit before the catalogue import touches the store.
+            await Task.yield()
             await Task.yield()
             do {
                 let importer = CatalogueImporter(modelContainer: OrchardStore.container)

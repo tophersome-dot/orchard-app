@@ -27,6 +27,9 @@ struct FarmScreen: View {
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
     @State private var framed = false
+    @State private var userMoved = false
+    @State private var scenery = false
+    @State private var frameRequest = 0
     @State private var selected: VarietyLink?
     @State private var gesture = MapGesture.undecided
     @State private var dragging: UUID?
@@ -50,7 +53,8 @@ struct FarmScreen: View {
     }
 
     private var plants: [String: FarmPlantInfo] {
-        Dictionary(uniqueKeysWithValues: varieties.map { variety in
+        guard scenery else { return [:] }
+        return Dictionary(uniqueKeysWithValues: varieties.map { variety in
             (variety.slug, FarmPlantInfo(
                 id: variety.slug,
                 name: variety.name,
@@ -63,10 +67,15 @@ struct FarmScreen: View {
         })
     }
 
+    private var yardPlan: YardPlan {
+        let zones = Dictionary(uniqueKeysWithValues: plants.map { ($0.key, $0.value.zone) })
+        return FarmExpansion.plan(records: records, zones: zones)
+    }
+
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                Color(red: 0.55, green: 0.78, blue: 0.34)
+                Color(red: 0.51, green: 0.63, blue: 0.10)
                 FarmMapView(
                     records: displayRecords,
                     plants: plants,
@@ -74,7 +83,8 @@ struct FarmScreen: View {
                     hover: hover,
                     hoverValid: hoverValid,
                     dragging: dragging,
-                    showsNames: scale >= 1.25
+                    showsNames: scale >= 1.25,
+                    detailed: scenery
                 )
                 .scaleEffect(scale, anchor: .center)
                 .position(x: geo.size.width / 2 + offset.width, y: geo.size.height / 2 + offset.height)
@@ -83,6 +93,7 @@ struct FarmScreen: View {
             .gesture(drag(in: geo.size))
             .simultaneousGesture(pinch)
             .onAppear { frameHouse(in: geo.size) }
+            .onChange(of: frameRequest) { _, _ in frameHouse(in: geo.size) }
         }
         .overlay(alignment: .top) { topBar }
         .overlay(alignment: .bottom) { editBar }
@@ -90,9 +101,23 @@ struct FarmScreen: View {
             VarietyDetailView(slug: link.id)
         }
         .task(id: triedSignature) {
+            // Paint the grass before any sprite decode or yard rebuild.
             await Task.yield()
+            if !scenery {
+                scenery = true
+                if !userMoved {
+                    framed = false
+                    frameRequest += 1
+                }
+                await Task.yield()
+            }
+            guard !varieties.isEmpty else { return }
             let tried = varieties.filter(\.isTried).map { (id: $0.slug, zone: $0.zoneRaw) }
             try? FarmLayout.sync(context: context, tried: tried)
+            if !userMoved {
+                framed = false
+                frameRequest += 1
+            }
         }
     }
 
@@ -170,6 +195,7 @@ struct FarmScreen: View {
                         dragging = hit.id
                     } else if travel > 8 {
                         gesture = .pan
+                        userMoved = true
                     }
                 }
                 switch gesture {
@@ -214,7 +240,8 @@ struct FarmScreen: View {
     private var pinch: some Gesture {
         MagnificationGesture()
             .onChanged { value in
-                scale = min(1.7, max(0.55, lastScale * value))
+                userMoved = true
+                scale = min(1.7, max(0.32, lastScale * value))
             }
             .onEnded { _ in
                 lastScale = scale
@@ -229,7 +256,7 @@ struct FarmScreen: View {
     }
 
     private func tile(at location: CGPoint, in viewSize: CGSize) -> FarmTile {
-        let viewport = FarmViewport.covering(FarmExpansion.boundsTiles(records: records, tastedCount: tastedCount))
+        let viewport = mapViewport
         let visualCenter = CGPoint(x: viewSize.width / 2 + offset.width, y: viewSize.height / 2 + offset.height)
         let content = CGPoint(
             x: viewport.size.width / 2 + (location.x - visualCenter.x) / scale,
@@ -238,8 +265,12 @@ struct FarmScreen: View {
         return viewport.tile(at: content)
     }
 
+    private var mapViewport: FarmViewport {
+        FarmViewport.covering(FarmExpansion.boundsTiles(records: records, tastedCount: tastedCount, plan: yardPlan))
+    }
+
     private func item(at location: CGPoint, in viewSize: CGSize) -> FarmRecord? {
-        let viewport = FarmViewport.covering(FarmExpansion.boundsTiles(records: records, tastedCount: tastedCount))
+        let viewport = mapViewport
         let visualCenter = CGPoint(x: viewSize.width / 2 + offset.width, y: viewSize.height / 2 + offset.height)
         let content = CGPoint(
             x: viewport.size.width / 2 + (location.x - visualCenter.x) / scale,
@@ -273,7 +304,8 @@ struct FarmScreen: View {
             on: tile,
             tastedCount: tastedCount,
             occupied: occupied,
-            reserved: reserved
+            reserved: reserved,
+            plan: yardPlan
         )
     }
 
@@ -302,15 +334,19 @@ struct FarmScreen: View {
     private func frameHouse(in viewSize: CGSize) {
         guard !framed, viewSize.width > 1, viewSize.height > 1 else { return }
         framed = true
-        let map = FarmViewport.covering(FarmExpansion.boundsTiles(records: records, tastedCount: tastedCount))
-        let focus = FarmExpansion.starterFocusTiles().map { map.viewPoint($0) }
+        let map = mapViewport
+        let focus = FarmExpansion.focusTiles(for: yardPlan).map { map.viewPoint($0) }
         guard let minX = focus.map(\.x).min(),
               let maxX = focus.map(\.x).max(),
               let minY = focus.map(\.y).min(),
               let maxY = focus.map(\.y).max() else { return }
-        let box = CGRect(x: minX - 36, y: minY - IsoMap.tileWidth, width: (maxX - minX) + 72, height: (maxY - minY) + IsoMap.tileWidth + 48)
-        let fitted = min((viewSize.width - 28) / box.width, (viewSize.height - 110) / box.height)
-        scale = min(1.2, max(0.45, fitted))
+        let box = CGRect(
+            x: minX - IsoMap.tileWidth * 0.2,
+            y: minY - IsoMap.tileWidth,
+            width: (maxX - minX) + IsoMap.tileWidth * 0.5,
+            height: (maxY - minY) + IsoMap.tileWidth * 1.15
+        )
+        scale = min(1.35, (viewSize.width * 0.85) / box.width)
         lastScale = scale
         let boxCenter = CGPoint(x: box.midX, y: box.midY)
         let mapCenter = CGPoint(x: map.size.width / 2, y: map.size.height / 2)

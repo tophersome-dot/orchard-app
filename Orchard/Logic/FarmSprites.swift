@@ -6,11 +6,21 @@ import UIKit
 enum FarmSprite {
     static let wiltingTree = "tree_wilting"
     static let sapling = "tree_sapling"
-    static let emptyBed = "bed_empty"
+    static let emptyBed = "soil_bed"
+    static let soilTree = "soil_tree"
+    static let soilVine = "soil_vine"
+    static let grass = "ground_grass"
+    static let grassDark = "ground_grass_dark"
+    static let stonePath = "path_stone"
     static let fence = "fence_picket_straight"
     static let tractor = "tractor"
     static let bush = "bush"
     static let rock = "rock"
+    /// Side runs of the orchard fence. Stored on the fence record so the sprite can be mirrored.
+    static let fenceSide = "side"
+
+    private static var images: [String: UIImage] = [:]
+    private static var aspects: [String: CGFloat] = [:]
 
     static func house(_ tier: HouseTier) -> String {
         switch tier {
@@ -30,7 +40,20 @@ enum FarmSprite {
     static func fruit(varietyID: String) -> String { "fruit_\(varietyID)" }
 
     static func image(named name: String) -> UIImage? {
-        UIImage(named: name)
+        if let cached = images[name] { return cached }
+        guard let image = UIImage(named: name) else { return nil }
+        images[name] = image
+        if image.size.width > 0 {
+            aspects[name] = image.size.height / image.size.width
+        }
+        return image
+    }
+
+    /// Height ÷ width. Nil until the image has been read once.
+    static func aspect(named name: String) -> CGFloat? {
+        if let known = aspects[name] { return known }
+        guard let image = image(named: name), image.size.width > 0 else { return nil }
+        return image.size.height / image.size.width
     }
 
     /// Loved plants scale up a little. Wilting trees draw slightly smaller.

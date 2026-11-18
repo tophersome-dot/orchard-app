@@ -22,7 +22,7 @@ Final compile and any TestFlight upload happen on a Mac. This repository was pre
 
 The tab bar is Farm, Taste, Shop, and Collection. Shop is supermarket mode and is one tap from anywhere.
 
-- **Farm.** A tile map with a fenced orchard, soil beds, vine spots, the house, and the tractor. Pinch to zoom and drag to pan. Plant it drops the variety on the next free matching spot. Edit lets you drag items, add picket fences and stone paths, and undo. Tap a plant for its card.
+- **Farm.** A tiled grass map. The orchard is a picket rectangle that adds rows as more trees are tasted, with soil under each tree. Beds are a sunken block and vines have their own row, with stone paths between the sections. The house and tractor share a yard by the path. Pinch to zoom and drag to pan. Plant it drops the variety on the next free spot in that section. Edit lets you drag items, add picket fences and stone paths, and undo. Tap a plant for its card.
 - **Quick taste.** Searchable catalogue, or add a custom variety. Sweet, Tart, Crunch, and Juicy sliders, an overall score from 1 to 5 in half steps, notes, and an optional photo. Plant it saves the tasting and jumps back to the farm.
 - **Supermarket mode.** Opens on a large search field. Typed matches show a colour, the score, and a one-line note. Untasted matches are listed as "Not tried yet". With an empty field, the screen is the personal ranking of what has already been tasted.
 - **Collection.** Per-category log such as Apples 4 / 25. The denominator is the live catalogue for that category, including custom varieties, not a fixed target of 30. Tried varieties are in colour. The rest are faded chase tiles. The Hunt segment is the shopping list.
@@ -40,7 +40,7 @@ Thresholds live in `HouseRules.thresholds` in `Orchard/Logic/HouseProgress.swift
 | 8 | Farmhouse |
 | 15 | Homestead |
 
-The tractor starts beside the shed. Land plots are in `FarmExpansion.plots` in `Orchard/Logic/FarmExpansion.swift`: home is open immediately, east at 4 tasted varieties, south at 8, and the corner at 12. Locked plots are dashed outlines until then.
+The tractor starts in the yard in front of the shed. The orchard and the bed block grow extra rows in `FarmExpansion.plan` so every tasted tree or bed has a slot. Dashed plots beside them open with the variety count: east at 4, south at 8, and the corner at 12.
 
 ## Photos and stickers
 

@@ -18,23 +18,29 @@ struct FarmMapView: View {
     var hoverValid: Bool
     var dragging: UUID?
     var showsNames: Bool
+    /// Sprites wait until the first frame has committed. The grass itself draws immediately.
+    var detailed: Bool
+
+    private var zones: [String: String] {
+        Dictionary(uniqueKeysWithValues: plants.map { ($0.key, $0.value.zone) })
+    }
+
+    private var yardPlan: YardPlan {
+        FarmExpansion.plan(records: records, zones: zones)
+    }
 
     private var viewport: FarmViewport {
-        FarmViewport.covering(FarmExpansion.boundsTiles(records: records, tastedCount: tastedCount))
+        FarmViewport.covering(FarmExpansion.boundsTiles(records: records, tastedCount: tastedCount, plan: yardPlan))
     }
 
     var body: some View {
         let frame = viewport
+        let plan = yardPlan
         ZStack {
-            Color(red: 0.55, green: 0.78, blue: 0.34)
+            Color(red: 0.51, green: 0.63, blue: 0.10)
+            grass(in: frame)
             Canvas { context, _ in
-                let shade = Color(red: 0.42, green: 0.66, blue: 0.24).opacity(0.45)
-                for column in -1...22 {
-                    for row in -1...20 where (column + row).isMultiple(of: 2) {
-                        context.fill(diamond(at: frame.viewPoint(FarmTile(column: column, row: row))), with: .color(shade))
-                    }
-                }
-                for plot in FarmExpansion.lockedPlots(tastedCount: tastedCount) {
+                for plot in FarmExpansion.lockedPlots(tastedCount: tastedCount, plan: plan) {
                     context.stroke(
                         plotOutline(plot, viewport: frame),
                         with: .color(Color.white.opacity(0.9)),
@@ -43,13 +49,15 @@ struct FarmMapView: View {
                 }
             }
             .allowsHitTesting(false)
-            ForEach(drawables(viewport: frame)) { item in
-                drawableView(item)
-                    .position(
-                        x: item.point.x,
-                        y: item.anchorsBase ? item.point.y - item.foot / 2 : item.point.y
-                    )
-                    .zIndex(item.depth)
+            if detailed {
+                ForEach(drawables(viewport: frame, plan: plan)) { item in
+                    drawableView(item)
+                        .position(
+                            x: item.point.x,
+                            y: item.anchorsBase ? item.point.y - item.foot / 2 : item.point.y
+                        )
+                        .zIndex(item.depth)
+                }
             }
             if let hover {
                 IsoDiamond()
@@ -61,16 +69,30 @@ struct FarmMapView: View {
         .frame(width: frame.size.width, height: frame.size.height)
     }
 
-    private func diamond(at point: CGPoint) -> Path {
-        let halfWidth = IsoMap.tileWidth / 2
-        let halfHeight = IsoMap.tileHeight / 2
-        var path = Path()
-        path.move(to: CGPoint(x: point.x, y: point.y - halfHeight))
-        path.addLine(to: CGPoint(x: point.x + halfWidth, y: point.y))
-        path.addLine(to: CGPoint(x: point.x, y: point.y + halfHeight))
-        path.addLine(to: CGPoint(x: point.x - halfWidth, y: point.y))
-        path.closeSubpath()
-        return path
+    /// Seamless grass, with a few large darker patches. One grass image is about 3.5 tiles across.
+    private func grass(in frame: FarmViewport) -> some View {
+        Canvas { context, size in
+            let pitch = IsoMap.tileWidth * 3.5
+            let columns = Int(ceil(size.width / pitch)) + 1
+            let rows = Int(ceil(size.height / pitch)) + 1
+            for row in 0..<rows {
+                for column in 0..<columns {
+                    let rect = CGRect(x: CGFloat(column) * pitch, y: CGFloat(row) * pitch, width: pitch, height: pitch)
+                    context.draw(Image(FarmSprite.grass), in: rect)
+                }
+            }
+            let patch = pitch * 2
+            for tile in [FarmTile(column: -2, row: 3), FarmTile(column: 6, row: 14), FarmTile(column: 12, row: 9)] {
+                let center = frame.viewPoint(tile)
+                let rect = CGRect(x: center.x - patch / 2, y: center.y - patch / 2, width: patch, height: patch)
+                context.drawLayer { layer in
+                    layer.opacity = 0.42
+                    layer.blendMode = .multiply
+                    layer.draw(Image(FarmSprite.grassDark), in: rect)
+                }
+            }
+        }
+        .allowsHitTesting(false)
     }
 
     private func plotOutline(_ plot: FarmPlotSpec, viewport: FarmViewport) -> Path {
@@ -89,19 +111,23 @@ struct FarmMapView: View {
         return path
     }
 
-    private func drawables(viewport: FarmViewport) -> [MapDrawable] {
+    private func drawables(viewport: FarmViewport, plan: YardPlan) -> [MapDrawable] {
         var items: [MapDrawable] = []
         let occupied = Set(records.map(\.tile))
-        for plot in FarmExpansion.unlockedPlots(tastedCount: tastedCount) {
-            for tile in plot.treeSpots where !occupied.contains(tile) {
-                items.append(makeDrawable(id: "sapling-\(tile.column)-\(tile.row)", tile: tile, depth: depth(tile), viewport: viewport, visual: .sapling))
+        for tile in plan.treeSpots {
+            items.append(makeDrawable(id: "soil-tree-\(tile.column)-\(tile.row)", tile: tile, depth: depth(tile) + 0.05, viewport: viewport, visual: .soilTree))
+            if !occupied.contains(tile) {
+                items.append(makeDrawable(id: "sapling-\(tile.column)-\(tile.row)", tile: tile, depth: depth(tile) + 0.4, viewport: viewport, visual: .sapling))
             }
-            for tile in plot.bedSpots where !occupied.contains(tile) {
-                items.append(makeDrawable(id: "bed-\(tile.column)-\(tile.row)", tile: tile, depth: depth(tile), viewport: viewport, visual: .emptyBed))
-            }
+        }
+        for tile in plan.bedSpots where !occupied.contains(tile) {
+            items.append(makeDrawable(id: "soil-bed-\(tile.column)-\(tile.row)", tile: tile, depth: depth(tile) + 0.05, viewport: viewport, visual: .soilBed))
         }
         for record in records {
             let tile = record.id == dragging ? (hover ?? record.tile) : record.tile
+            if record.kind == .plant, let id = record.varietyID, let info = plants[id], FarmExpansion.spotKind(zone: info.zone) == .vine {
+                items.append(makeDrawable(id: "soil-vine-\(record.id.uuidString)", tile: tile, depth: depth(tile) + 0.05, viewport: viewport, visual: .soilVine))
+            }
             let visual = visual(for: record)
             items.append(makeDrawable(id: record.id.uuidString, tile: tile, depth: depth(tile) + record.kind.depthBias, viewport: viewport, visual: visual))
         }
@@ -120,7 +146,7 @@ struct FarmMapView: View {
         case .tractor:
             return .tractor
         case .fence:
-            return .fence
+            return .fence(alongColumn: record.varietyID == FarmSprite.fenceSide)
         case .path:
             return .path
         case .bush:
@@ -146,40 +172,48 @@ struct FarmMapView: View {
         )
     }
 
-    /// One tree, bed, or vine matches one tile. The house footprint is two tiles across.
+    /// Trees stand on one tile. Ground decals overlap their tile a little so the pieces read as continuous.
     private func displayWidth(_ visual: MapVisual) -> CGFloat {
         switch visual {
         case .house: IsoMap.tileWidth * 2
-        case .tractor: IsoMap.tileWidth
-        case .fence: 52
-        case .path: IsoMap.tileWidth * 0.96
+        case .tractor: IsoMap.tileWidth * 1.15
+        case .fence: fenceWidth
+        case .path: IsoMap.tileWidth * 1.12
         case .bush: 46
         case .rock: 40
-        case .sapling: 32
-        case .emptyBed: IsoMap.tileWidth
+        case .sapling: 36
+        case .soilTree: IsoMap.tileWidth * 1.2
+        case .soilVine, .soilBed: IsoMap.tileWidth * 1.08
         case .emptyVine: 0
         case .plant(let info):
             switch FarmExpansion.spotKind(zone: info.zone) {
             case .tree: IsoMap.tileWidth
-            case .bed: IsoMap.tileWidth
+            case .bed: IsoMap.tileWidth * 1.05
             case .vine: IsoMap.tileWidth * 0.92
             }
         }
     }
 
+    /// Long enough that neighbouring pickets overlap into one run.
+    private var fenceWidth: CGFloat {
+        let step = hypot(IsoMap.tileWidth / 2, IsoMap.tileHeight / 2)
+        let artDiagonal = hypot(600.0, 561.0) / 600.0
+        return step * 1.7 / artDiagonal
+    }
+
     private func footHeight(_ visual: MapVisual, width: CGFloat) -> CGFloat {
-        if let name = spriteName(visual), let image = FarmSprite.image(named: name), image.size.width > 0 {
-            return width * image.size.height / image.size.width
+        if let name = spriteName(visual), let aspect = FarmSprite.aspect(named: name) {
+            return width * aspect
         }
         return switch visual {
         case .house: IsoMap.tileWidth * 1.4
         case .tractor: IsoMap.tileWidth * 0.9
         case .fence: 36
-        case .path: IsoMap.tileHeight * 0.96
+        case .path: IsoMap.tileHeight
         case .bush: 32
         case .rock: 28
         case .sapling: 48
-        case .emptyBed: IsoMap.tileHeight
+        case .soilTree, .soilVine, .soilBed: IsoMap.tileHeight
         case .emptyVine: 0
         case .plant: IsoMap.tileWidth
         }
@@ -190,13 +224,16 @@ struct FarmMapView: View {
         case .house(let tier): FarmSprite.house(tier)
         case .tractor: FarmSprite.tractor
         case .fence: FarmSprite.fence
+        case .path: FarmSprite.stonePath
         case .bush: FarmSprite.bush
         case .rock: FarmSprite.rock
         case .sapling: FarmSprite.sapling
-        case .emptyBed: FarmSprite.emptyBed
+        case .soilTree: FarmSprite.soilTree
+        case .soilVine: FarmSprite.soilVine
+        case .soilBed: FarmSprite.emptyBed
         case .plant(let info):
             FarmSprite.plantName(zone: info.zone, category: info.category, varietyID: info.id, rating: info.rating)
-        case .path, .emptyVine:
+        case .emptyVine:
             nil
         }
     }
@@ -213,17 +250,18 @@ struct FarmMapView: View {
             sprite(FarmSprite.tractor, width: width, fallbackHeight: item.foot) {
                 TractorArt()
             }
-        case .fence:
+        case .fence(let alongColumn):
             sprite(FarmSprite.fence, width: width, fallbackHeight: item.foot) {
                 RoundedRectangle(cornerRadius: 2)
                     .fill(Color.white)
                     .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color(white: 0.75), lineWidth: 1))
             }
+            .scaleEffect(x: alongColumn ? -1 : 1, y: 1)
+            .rotationEffect(.radians(fenceAngle(alongColumn: alongColumn)))
         case .path:
-            IsoDiamond()
-                .fill(Color(red: 0.76, green: 0.73, blue: 0.64))
-                .overlay(IsoDiamond().stroke(Color(red: 0.62, green: 0.58, blue: 0.50), lineWidth: 1))
-                .frame(width: width, height: item.foot)
+            sprite(FarmSprite.stonePath, width: width, fallbackHeight: item.foot) {
+                IsoDiamond().fill(Color(red: 0.76, green: 0.73, blue: 0.64))
+            }
         case .bush:
             sprite(FarmSprite.bush, width: width, fallbackHeight: item.foot) {
                 Ellipse().fill(OrchardColor.grassDark)
@@ -236,7 +274,15 @@ struct FarmMapView: View {
             sprite(FarmSprite.sapling, width: width, fallbackHeight: item.foot) {
                 Capsule().fill(OrchardColor.leaf)
             }
-        case .emptyBed:
+        case .soilTree:
+            sprite(FarmSprite.soilTree, width: width, fallbackHeight: item.foot) {
+                Ellipse().fill(OrchardColor.soil)
+            }
+        case .soilVine:
+            sprite(FarmSprite.soilVine, width: width, fallbackHeight: item.foot) {
+                Ellipse().fill(OrchardColor.soil)
+            }
+        case .soilBed:
             sprite(FarmSprite.emptyBed, width: width, fallbackHeight: item.foot) {
                 IsoDiamond().fill(OrchardColor.soil)
             }
@@ -247,13 +293,22 @@ struct FarmMapView: View {
         }
     }
 
+    /// The picket art runs steeper than an iso edge. Rotate it onto the grid, and mirror it for the other side.
+    private func fenceAngle(alongColumn: Bool) -> Double {
+        let grid = atan2(Double(IsoMap.tileHeight), Double(IsoMap.tileWidth))
+        let artwork = atan2(561.0, 600.0)
+        let alongRow = grid - artwork
+        return alongColumn ? -alongRow : alongRow
+    }
+
     private func plantView(_ info: FarmPlantInfo, width: CGFloat, foot: CGFloat) -> some View {
         let name = FarmSprite.plantName(zone: info.zone, category: info.category, varietyID: info.id, rating: info.rating)
         let scale = FarmSprite.scale(for: info.rating)
+        let grounded = FarmExpansion.spotKind(zone: info.zone) == .bed
         return sprite(name, width: width, fallbackHeight: foot) {
             fallbackPlant(info)
         }
-        .scaleEffect(scale, anchor: .bottom)
+        .scaleEffect(scale, anchor: grounded ? .center : .bottom)
         .overlay(alignment: .bottom) {
             if showsNames {
                 Text(info.name)
@@ -286,7 +341,7 @@ struct FarmMapView: View {
         if let image = FarmSprite.image(named: name), image.size.width > 0 {
             Image(uiImage: image)
                 .resizable()
-                .interpolation(.high)
+                .interpolation(.medium)
                 .frame(width: width, height: width * image.size.height / image.size.width)
         } else {
             fallback()
@@ -308,18 +363,26 @@ private struct MapDrawable: Identifiable {
 private enum MapVisual {
     case house(HouseTier)
     case tractor
-    case fence
+    case fence(alongColumn: Bool)
     case path
     case bush
     case rock
     case sapling
-    case emptyBed
+    case soilTree
+    case soilVine
+    case soilBed
     case emptyVine
     case plant(FarmPlantInfo)
 
     var anchorsBase: Bool {
-        if case .path = self { return false }
-        return true
+        switch self {
+        case .path, .soilTree, .soilVine, .soilBed, .fence:
+            return false
+        case .plant(let info):
+            return FarmExpansion.spotKind(zone: info.zone) != .bed
+        default:
+            return true
+        }
     }
 }
 
@@ -338,7 +401,7 @@ private extension FarmItemKind {
 
 struct FarmViewport: Equatable {
     var content: CGRect
-    var pad: CGFloat = 160
+    var pad: CGFloat = 200
 
     var size: CGSize {
         CGSize(width: max(content.width, 1) + pad * 2, height: max(content.height, 1) + pad * 2)
@@ -367,9 +430,11 @@ struct FarmViewport: Equatable {
 }
 
 extension FarmExpansion {
-    static func boundsTiles(records: [FarmRecord], tastedCount: Int) -> [FarmTile] {
+    static func boundsTiles(records: [FarmRecord], tastedCount: Int, plan: YardPlan) -> [FarmTile] {
         var tiles = records.map(\.tile)
-        for plot in plots {
+        tiles.append(contentsOf: plan.treeSpots + plan.bedSpots + plan.vineSpots)
+        tiles.append(contentsOf: plan.fences.map(\.tile))
+        for plot in plots(for: plan) {
             tiles.append(FarmTile(column: plot.columns.lowerBound, row: plot.rows.lowerBound))
             tiles.append(FarmTile(column: plot.columns.upperBound, row: plot.rows.lowerBound))
             tiles.append(FarmTile(column: plot.columns.upperBound, row: plot.rows.upperBound))
