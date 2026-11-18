@@ -358,7 +358,7 @@ struct FarmScreen: View {
         }
         let span = max(maxX - minX, 1)
         let padded = span + IsoMap.tileWidth * 2.2
-        let fitted = min(1.6, (viewSize.width * 0.90) / padded)
+        let fitted = DebugLaunch.farmZoom ?? min(1.6, (viewSize.width * 0.90) / padded)
         let center = CGPoint(x: (minX + maxX) / 2, y: (minY + maxY) / 2 - IsoMap.tileHeight * 0.6)
         return FarmCamera(scale: fitted, center: center, pan: .zero)
     }

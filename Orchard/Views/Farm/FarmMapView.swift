@@ -184,34 +184,36 @@ struct FarmMapView: View {
     }
 
     private func makeDrawable(id: String, tile: FarmTile, depth: Double, visual: MapVisual) -> MapDrawable {
-        let width = displayWidth(visual) * camera.scale
+        let width = worldWidth(visual) * camera.scale
         let foot = footHeight(visual, width: width)
         return MapDrawable(
             id: id,
             depth: depth,
             point: camera.screenPoint(IsoMap.center(tile), in: canvasSize),
             visual: visual,
+            width: width,
             foot: foot,
             anchorsBase: visual.anchorsBase
         )
     }
 
-    /// Trees stand on one tile. Ground decals overlap their tile a little so the pieces read as continuous.
-    private func displayWidth(_ visual: MapVisual) -> CGFloat {
+    /// Sprite widths in world points, before the camera zoom. One tile is `IsoMap.tileWidth`.
+    private func worldWidth(_ visual: MapVisual) -> CGFloat {
+        let tile = IsoMap.tileWidth
         switch visual {
-        case .house: IsoMap.tileWidth * 2
-        case .tractor: IsoMap.tileWidth * 1.15
+        case .house: tile * 2
+        case .tractor: tile
         case .fence: fenceWidth
-        case .path: IsoMap.tileWidth * 1.12
-        case .bush: 46
-        case .rock: 40
-        case .sapling: 36
-        case .soilTree, .soilVine, .soilBed: IsoMap.tileWidth * 1.2
+        case .path: tile * 1.04
+        case .bush: tile * 0.55
+        case .rock: tile * 0.48
+        case .sapling: tile * 0.43
+        case .soilTree: tile * 1.2
+        case .soilVine, .soilBed: tile
         case .emptyVine: 0
         case .plant(let info):
             switch FarmExpansion.spotKind(zone: info.zone) {
-            case .tree: IsoMap.tileWidth
-            case .bed, .vine: IsoMap.tileWidth * 1.2
+            case .tree, .bed, .vine: tile
             }
         }
     }
@@ -262,7 +264,7 @@ struct FarmMapView: View {
 
     @ViewBuilder
     private func drawableView(_ item: MapDrawable) -> some View {
-        let width = displayWidth(item.visual)
+        let width = item.width
         switch item.visual {
         case .house(let tier):
             sprite(FarmSprite.house(tier), width: width, fallbackHeight: item.foot) {
@@ -377,6 +379,8 @@ private struct MapDrawable: Identifiable {
     var depth: Double
     var point: CGPoint
     var visual: MapVisual
+    /// On-screen width. Already multiplied by the camera zoom, same as `point`.
+    var width: CGFloat
     /// Height of the sprite whose base sits on the tile centre.
     var foot: CGFloat
     var anchorsBase: Bool

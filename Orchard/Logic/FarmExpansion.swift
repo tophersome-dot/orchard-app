@@ -73,7 +73,7 @@ struct YardPlan: Equatable {
 /// How the map grows. The orchard and the beds add rows as more of that kind are tasted.
 enum FarmExpansion {
     static let treeColumns = [2, 4, 6]
-    static let bedColumns = [2, 4, 6, 8]
+    static let bedColumns = [2, 3, 4, 5]
     static let vineColumns = [2, 4, 6, 8]
     /// Front tile of the house, in the yard beside the orchard.
     static let houseAnchor = FarmTile(column: 12, row: 4)

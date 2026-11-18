@@ -56,6 +56,8 @@ These arguments are read only in Debug builds:
 xcrun simctl launch booted com.chrismartin.orchard -seedSampleTastings -openScreen farm
 ```
 
+`-farmZoom 0.45` overrides the opening camera scale. `1` means one tile is 84 points wide. Omit it and the yard is framed to about 90% of the screen width.
+
 `-openScreen` accepts `farm`, `taste`, `shop` (or `supermarket`), and `collection`.
 
 `-seedSampleTastings` inserts fictional tastings for varieties that have none, so the farm, supermarket list, and collection have something to screenshot. They are not a real tasting notebook. Delete them from a variety card if you want them gone. A variety you have already tasted is left alone.
