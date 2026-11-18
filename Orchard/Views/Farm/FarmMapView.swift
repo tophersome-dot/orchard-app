@@ -28,6 +28,12 @@ struct FarmMapView: View {
         ZStack {
             Color(red: 0.55, green: 0.78, blue: 0.34)
             Canvas { context, _ in
+                let shade = Color(red: 0.42, green: 0.66, blue: 0.24).opacity(0.45)
+                for column in -1...22 {
+                    for row in -1...20 where (column + row).isMultiple(of: 2) {
+                        context.fill(diamond(at: frame.viewPoint(FarmTile(column: column, row: row))), with: .color(shade))
+                    }
+                }
                 for plot in FarmExpansion.lockedPlots(tastedCount: tastedCount) {
                     context.stroke(
                         plotOutline(plot, viewport: frame),
@@ -53,6 +59,18 @@ struct FarmMapView: View {
             }
         }
         .frame(width: frame.size.width, height: frame.size.height)
+    }
+
+    private func diamond(at point: CGPoint) -> Path {
+        let halfWidth = IsoMap.tileWidth / 2
+        let halfHeight = IsoMap.tileHeight / 2
+        var path = Path()
+        path.move(to: CGPoint(x: point.x, y: point.y - halfHeight))
+        path.addLine(to: CGPoint(x: point.x + halfWidth, y: point.y))
+        path.addLine(to: CGPoint(x: point.x, y: point.y + halfHeight))
+        path.addLine(to: CGPoint(x: point.x - halfWidth, y: point.y))
+        path.closeSubpath()
+        return path
     }
 
     private func plotOutline(_ plot: FarmPlotSpec, viewport: FarmViewport) -> Path {
@@ -203,8 +221,8 @@ struct FarmMapView: View {
             }
         case .path:
             IsoDiamond()
-                .fill(OrchardColor.path)
-                .overlay(IsoDiamond().stroke(OrchardColor.pathEdge, lineWidth: 1))
+                .fill(Color(red: 0.76, green: 0.73, blue: 0.64))
+                .overlay(IsoDiamond().stroke(Color(red: 0.62, green: 0.58, blue: 0.50), lineWidth: 1))
                 .frame(width: width, height: item.foot)
         case .bush:
             sprite(FarmSprite.bush, width: width, fallbackHeight: item.foot) {

@@ -48,42 +48,61 @@ struct FarmPlotSpec: Equatable, Identifiable {
 
 /// How the map grows. Edit `plots` to retune unlocks and where things can be planted.
 enum FarmExpansion {
+    /// Starter yard plus the dashed plots beside it. Spots are listed row by row.
+    /// Trees are two steps apart so a one-tile sprite does not overlap its neighbour or the fence.
     static let plots: [FarmPlotSpec] = [
         FarmPlotSpec(
             id: "home",
             unlockAt: 0,
-            columns: 1...8,
-            rows: 1...8,
-            treeSpots: [FarmTile(column: 2, row: 2), FarmTile(column: 4, row: 2), FarmTile(column: 3, row: 3), FarmTile(column: 2, row: 4), FarmTile(column: 4, row: 4), FarmTile(column: 3, row: 4)],
-            bedSpots: [FarmTile(column: 6, row: 5), FarmTile(column: 8, row: 5), FarmTile(column: 6, row: 6), FarmTile(column: 8, row: 6), FarmTile(column: 7, row: 7), FarmTile(column: 6, row: 8)],
-            vineSpots: [FarmTile(column: 2, row: 6), FarmTile(column: 3, row: 6), FarmTile(column: 4, row: 6), FarmTile(column: 3, row: 7)]
+            columns: 0...14,
+            rows: 0...13,
+            treeSpots: [
+                FarmTile(column: 2, row: 2), FarmTile(column: 4, row: 2), FarmTile(column: 6, row: 2),
+                FarmTile(column: 2, row: 4), FarmTile(column: 4, row: 4), FarmTile(column: 6, row: 4)
+            ],
+            bedSpots: [
+                FarmTile(column: 2, row: 9), FarmTile(column: 4, row: 9), FarmTile(column: 6, row: 9),
+                FarmTile(column: 2, row: 11), FarmTile(column: 4, row: 11), FarmTile(column: 6, row: 11)
+            ],
+            vineSpots: [
+                FarmTile(column: 2, row: 13), FarmTile(column: 4, row: 13), FarmTile(column: 6, row: 13), FarmTile(column: 8, row: 13)
+            ]
         ),
         FarmPlotSpec(
             id: "east",
             unlockAt: 4,
-            columns: 10...15,
-            rows: 1...7,
-            treeSpots: [FarmTile(column: 11, row: 2), FarmTile(column: 13, row: 2), FarmTile(column: 12, row: 3), FarmTile(column: 11, row: 4)],
-            bedSpots: [FarmTile(column: 14, row: 3), FarmTile(column: 14, row: 5), FarmTile(column: 12, row: 5), FarmTile(column: 13, row: 6)],
+            columns: 16...21,
+            rows: 0...6,
+            treeSpots: [
+                FarmTile(column: 17, row: 2), FarmTile(column: 19, row: 2),
+                FarmTile(column: 17, row: 4), FarmTile(column: 19, row: 4), FarmTile(column: 21, row: 2)
+            ],
+            bedSpots: [],
             vineSpots: []
         ),
         FarmPlotSpec(
             id: "south",
             unlockAt: 8,
-            columns: 1...8,
-            rows: 10...15,
-            treeSpots: [FarmTile(column: 2, row: 11), FarmTile(column: 4, row: 11), FarmTile(column: 3, row: 12), FarmTile(column: 2, row: 13), FarmTile(column: 4, row: 13)],
-            bedSpots: [],
-            vineSpots: [FarmTile(column: 6, row: 12), FarmTile(column: 7, row: 12), FarmTile(column: 6, row: 14), FarmTile(column: 7, row: 14)]
+            columns: 0...8,
+            rows: 15...19,
+            treeSpots: [],
+            bedSpots: [
+                FarmTile(column: 2, row: 16), FarmTile(column: 4, row: 16), FarmTile(column: 6, row: 16),
+                FarmTile(column: 2, row: 18), FarmTile(column: 4, row: 18)
+            ],
+            vineSpots: []
         ),
         FarmPlotSpec(
             id: "corner",
             unlockAt: 12,
-            columns: 10...15,
-            rows: 10...15,
+            columns: 16...21,
+            rows: 9...13,
             treeSpots: [],
-            bedSpots: [FarmTile(column: 11, row: 11), FarmTile(column: 13, row: 11), FarmTile(column: 12, row: 13)],
-            vineSpots: [FarmTile(column: 14, row: 12), FarmTile(column: 15, row: 13), FarmTile(column: 11, row: 14), FarmTile(column: 13, row: 14)]
+            bedSpots: [FarmTile(column: 21, row: 11)],
+            vineSpots: [
+                FarmTile(column: 17, row: 10), FarmTile(column: 19, row: 10),
+                FarmTile(column: 17, row: 12), FarmTile(column: 19, row: 12)
+            ]
         )
     ]
 
@@ -110,15 +129,20 @@ enum FarmExpansion {
     }
 
     static func spots(kind: FarmSpotKind, tastedCount: Int) -> [FarmTile] {
-        unlockedPlots(tastedCount: tastedCount).flatMap { $0.spots(kind) }
+        unlockedPlots(tastedCount: tastedCount).flatMap { plot in
+            plot.spots(kind).sorted { lhs, rhs in
+                if lhs.row != rhs.row { return lhs.row < rhs.row }
+                return lhs.column < rhs.column
+            }
+        }
     }
 
-    /// Front tile of the house. The other three tiles of its 2×2 footprint sit behind it.
-    static let houseAnchor = FarmTile(column: 7, row: 2)
-    /// Kept clear of the house so the tractor is not drawn on top of it.
-    static let tractorTile = FarmTile(column: 9, row: 0)
-    /// Positions written by the first starter layout, before the tractor had its own tile.
-    static let legacyTractorTile = FarmTile(column: 8, row: 3)
+    /// Front tile of the house, in the yard beside the orchard path.
+    static let houseAnchor = FarmTile(column: 12, row: 4)
+    /// Beside the yard, clear of the house footprint.
+    static let tractorTile = FarmTile(column: 14, row: 2)
+    /// The scattered layout's house tile. Seeing it means the yard should be rebuilt.
+    static let legacyHouseTile = FarmTile(column: 7, row: 2)
 
     static func footprint(kind: FarmItemKind, anchor: FarmTile) -> [FarmTile] {
         guard kind == .house else { return [anchor] }
@@ -171,62 +195,105 @@ enum FarmExpansion {
         }
     }
 
-    /// Tiles that should fill the opening camera: the fenced orchard, beds, house, and tractor.
+    /// Tiles that should fill the opening camera: orchard, beds, vines, yard.
     static func starterFocusTiles() -> [FarmTile] {
         var tiles = footprint(kind: .house, anchor: houseAnchor)
         tiles.append(tractorTile)
         guard let home = plots.first else { return tiles }
         tiles.append(contentsOf: home.treeSpots + home.bedSpots + home.vineSpots)
-        for column in 1...5 {
-            tiles.append(FarmTile(column: column, row: 1))
-            tiles.append(FarmTile(column: column, row: 5))
+        for column in 0...8 {
+            tiles.append(FarmTile(column: column, row: 0))
+            tiles.append(FarmTile(column: column, row: 6))
+            tiles.append(FarmTile(column: column, row: 13))
         }
-        for row in 2...4 {
-            tiles.append(FarmTile(column: 1, row: row))
-            tiles.append(FarmTile(column: 5, row: row))
+        for row in 0...6 {
+            tiles.append(FarmTile(column: 0, row: row))
+            tiles.append(FarmTile(column: 8, row: row))
         }
         return tiles
     }
 
-    /// House, tractor, the home-paddock fence, a short path, and a little scrub.
-    /// Plants are added later, when a variety is tasted.
+    /// Fenced orchard, bed block, vine row, and the yard. Plants are added when tasted.
     static func starterRecords() -> [FarmRecord] {
         var records: [FarmRecord] = [
             FarmRecord(id: UUID(), kind: .house, varietyID: nil, tile: houseAnchor),
             FarmRecord(id: UUID(), kind: .tractor, varietyID: nil, tile: tractorTile)
         ]
-        for column in 1...5 {
-            for row in 1...5 where column == 1 || column == 5 || row == 1 || row == 5 {
-                records.append(FarmRecord(id: UUID(), kind: .fence, varietyID: nil, tile: FarmTile(column: column, row: row)))
+        let gate = FarmTile(column: 4, row: 6)
+        for column in 0...8 {
+            for row in 0...6 where column == 0 || column == 8 || row == 0 || row == 6 {
+                let tile = FarmTile(column: column, row: row)
+                if tile == gate { continue }
+                records.append(FarmRecord(id: UUID(), kind: .fence, varietyID: nil, tile: tile))
             }
         }
-        for tile in [FarmTile(column: 6, row: 3), FarmTile(column: 6, row: 4), FarmTile(column: 5, row: 5)] {
+        var paths: [FarmTile] = [gate]
+        for column in 2...8 {
+            paths.append(FarmTile(column: column, row: 7))
+            paths.append(FarmTile(column: column, row: 10))
+            paths.append(FarmTile(column: column, row: 12))
+        }
+        for tile in [FarmTile(column: 9, row: 4), FarmTile(column: 10, row: 4), FarmTile(column: 12, row: 5), FarmTile(column: 12, row: 6), FarmTile(column: 12, row: 7)] {
+            paths.append(tile)
+        }
+        for tile in paths {
             records.append(FarmRecord(id: UUID(), kind: .path, varietyID: nil, tile: tile))
         }
-        for tile in [FarmTile(column: 0, row: 3), FarmTile(column: 9, row: 1), FarmTile(column: 0, row: 7)] {
+        for tile in [FarmTile(column: 9, row: 1), FarmTile(column: 0, row: 8)] {
             records.append(FarmRecord(id: UUID(), kind: .bush, varietyID: nil, tile: tile))
         }
-        for tile in [FarmTile(column: 9, row: 6), FarmTile(column: 1, row: 0)] {
-            records.append(FarmRecord(id: UUID(), kind: .rock, varietyID: nil, tile: tile))
-        }
+        records.append(FarmRecord(id: UUID(), kind: .rock, varietyID: nil, tile: FarmTile(column: 14, row: 5)))
         return records
     }
 
-    /// Places any tasted variety that does not yet have a spot, and drops plants that were untasted.
+    /// Places tasted varieties on the next free slot of their section, in row order.
+    /// An older scattered yard is rebuilt into the fenced sections once.
     static func reconciled(_ records: [FarmRecord], tried: [(id: String, zone: String)], tastedCount: Int) -> [FarmRecord] {
         let triedIDs = Set(tried.map(\.id))
+        if records.isEmpty || needsRelayout(records, tried: tried) {
+            return placeAll(tried, tastedCount: tastedCount)
+        }
         var next = records.filter { record in
             record.kind != .plant || (record.varietyID.map { triedIDs.contains($0) } ?? false)
         }
-        if next.isEmpty {
-            next = starterRecords()
-        }
-        if let tractorIndex = next.firstIndex(where: { $0.kind == .tractor && $0.tile == legacyTractorTile }),
-           next.contains(where: { $0.kind == .house && $0.tile == houseAnchor }) {
-            next[tractorIndex].tile = tractorTile
-        }
         var occupied = Set(next.map(\.tile))
         for item in tried where !next.contains(where: { $0.kind == .plant && $0.varietyID == item.id }) {
+            let kind = spotKind(zone: item.zone)
+            guard let tile = nextFreeSpot(kind: kind, tastedCount: tastedCount, occupied: occupied) else { continue }
+            next.append(FarmRecord(id: UUID(), kind: .plant, varietyID: item.id, tile: tile))
+            occupied.insert(tile)
+        }
+        return next
+    }
+
+    private static func needsRelayout(_ records: [FarmRecord], tried: [(id: String, zone: String)]) -> Bool {
+        if records.contains(where: { $0.kind == .house && $0.tile == legacyHouseTile }) {
+            return true
+        }
+        let valid = spotSets()
+        for record in records where record.kind == .plant {
+            guard let id = record.varietyID, let item = tried.first(where: { $0.id == id }) else { continue }
+            if !valid[spotKind(zone: item.zone), default: []].contains(record.tile) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private static func spotSets() -> [FarmSpotKind: Set<FarmTile>] {
+        var sets: [FarmSpotKind: Set<FarmTile>] = [:]
+        for plot in plots {
+            for kind in [FarmSpotKind.tree, .bed, .vine] {
+                sets[kind, default: []].formUnion(plot.spots(kind))
+            }
+        }
+        return sets
+    }
+
+    private static func placeAll(_ tried: [(id: String, zone: String)], tastedCount: Int) -> [FarmRecord] {
+        var next = starterRecords()
+        var occupied = Set(next.map(\.tile))
+        for item in tried {
             let kind = spotKind(zone: item.zone)
             guard let tile = nextFreeSpot(kind: kind, tastedCount: tastedCount, occupied: occupied) else { continue }
             next.append(FarmRecord(id: UUID(), kind: .plant, varietyID: item.id, tile: tile))

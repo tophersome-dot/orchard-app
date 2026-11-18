@@ -7,8 +7,8 @@ final class FarmExpansionTests: XCTestCase {
         XCTAssertEqual(FarmExpansion.unlockedPlots(tastedCount: 4).map(\.id), ["home", "east"])
         XCTAssertEqual(FarmExpansion.unlockedPlots(tastedCount: 8).map(\.id), ["home", "east", "south"])
         XCTAssertEqual(FarmExpansion.unlockedPlots(tastedCount: 12).map(\.id), ["home", "east", "south", "corner"])
-        XCTAssertTrue(FarmExpansion.isLocked(FarmTile(column: 11, row: 2), tastedCount: 0))
-        XCTAssertFalse(FarmExpansion.isLocked(FarmTile(column: 11, row: 2), tastedCount: 4))
+        XCTAssertTrue(FarmExpansion.isLocked(FarmTile(column: 17, row: 2), tastedCount: 0))
+        XCTAssertFalse(FarmExpansion.isLocked(FarmTile(column: 17, row: 2), tastedCount: 4))
     }
 
     func testAutoPlaceUsesTheNextFreeMatchingSpot() {
@@ -18,11 +18,11 @@ final class FarmExpansionTests: XCTestCase {
         XCTAssertEqual(second, FarmTile(column: 4, row: 2))
         XCTAssertEqual(
             FarmExpansion.nextFreeSpot(kind: .bed, tastedCount: 0, occupied: []),
-            FarmTile(column: 6, row: 5)
+            FarmTile(column: 2, row: 9)
         )
         XCTAssertEqual(
             FarmExpansion.nextFreeSpot(kind: .vine, tastedCount: 0, occupied: []),
-            FarmTile(column: 2, row: 6)
+            FarmTile(column: 2, row: 13)
         )
         XCTAssertNil(FarmExpansion.nextFreeSpot(kind: .tree, tastedCount: 0, occupied: Set(FarmExpansion.spots(kind: .tree, tastedCount: 0))))
     }
@@ -41,11 +41,11 @@ final class FarmExpansionTests: XCTestCase {
 
     func testPlantsOnlySitOnTheirOwnSpots() {
         let tree = FarmTile(column: 2, row: 2)
-        let bed = FarmTile(column: 6, row: 5)
+        let bed = FarmTile(column: 2, row: 9)
         XCTAssertTrue(FarmExpansion.canPlace(kind: .plant, spot: .tree, on: tree, tastedCount: 0, occupied: []))
         XCTAssertFalse(FarmExpansion.canPlace(kind: .plant, spot: .tree, on: bed, tastedCount: 0, occupied: []))
         XCTAssertFalse(FarmExpansion.canPlace(kind: .plant, spot: .bed, on: tree, tastedCount: 0, occupied: []))
-        XCTAssertFalse(FarmExpansion.canPlace(kind: .house, spot: nil, on: FarmTile(column: 11, row: 2), tastedCount: 0, occupied: []))
+        XCTAssertFalse(FarmExpansion.canPlace(kind: .house, spot: nil, on: FarmTile(column: 17, row: 2), tastedCount: 0, occupied: []))
         XCTAssertTrue(FarmExpansion.canPlace(kind: .fence, spot: nil, on: FarmTile(column: 0, row: 3), tastedCount: 0, occupied: []))
     }
 
@@ -68,13 +68,20 @@ final class FarmExpansionTests: XCTestCase {
         XCTAssertEqual(Double(FarmSprite.scale(for: 3)), 1, accuracy: 0.001)
     }
 
-    func testLegacyTractorMovesOffTheHouse() {
+    func testScatteredYardIsRebuiltIntoSections() {
         let records = [
-            FarmRecord(id: UUID(), kind: .house, varietyID: nil, tile: FarmExpansion.houseAnchor),
-            FarmRecord(id: UUID(), kind: .tractor, varietyID: nil, tile: FarmExpansion.legacyTractorTile)
+            FarmRecord(id: UUID(), kind: .house, varietyID: nil, tile: FarmExpansion.legacyHouseTile),
+            FarmRecord(id: UUID(), kind: .tractor, varietyID: nil, tile: FarmTile(column: 9, row: 0)),
+            FarmRecord(id: UUID(), kind: .plant, varietyID: "pink-lady", tile: FarmTile(column: 3, row: 3))
         ]
-        let fixed = FarmExpansion.reconciled(records, tried: [], tastedCount: 0)
+        let fixed = FarmExpansion.reconciled(records, tried: [(id: "pink-lady", zone: "orchard")], tastedCount: 1)
+        XCTAssertEqual(fixed.first { $0.kind == .house }?.tile, FarmExpansion.houseAnchor)
         XCTAssertEqual(fixed.first { $0.kind == .tractor }?.tile, FarmExpansion.tractorTile)
+        XCTAssertEqual(fixed.first { $0.kind == .plant }?.tile, FarmTile(column: 2, row: 2))
+        let fence = fixed.filter { $0.kind == .fence }.map(\.tile)
+        XCTAssertFalse(fence.contains(FarmTile(column: 4, row: 6)), "The front fence keeps a gate opening")
+        XCTAssertTrue(fence.contains(FarmTile(column: 0, row: 0)))
+        XCTAssertTrue(fence.contains(FarmTile(column: 8, row: 6)))
         let footprint = Set(FarmExpansion.footprint(kind: .house, anchor: FarmExpansion.houseAnchor))
         XCTAssertFalse(footprint.contains(FarmExpansion.tractorTile))
     }
