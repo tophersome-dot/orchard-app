@@ -96,9 +96,7 @@ struct ShopScreen: View {
 
     private func triedRow(_ variety: CatalogueEntry, latest: TastingSnapshot) -> some View {
         HStack(alignment: .center, spacing: 10) {
-            Circle()
-                .fill(OrchardColor.score(latest.overall))
-                .frame(width: 12, height: 12)
+            shopFruit(variety.id)
             VStack(alignment: .leading, spacing: 2) {
                 Text(variety.name)
                     .font(OrchardFont.title(18))
@@ -125,8 +123,18 @@ struct ShopScreen: View {
         }
     }
 
+    private func shopFruit(_ id: String) -> some View {
+        Group {
+            if let variety = varieties.first(where: { $0.slug == id }) {
+                FruitGlyph(id: variety.slug, form: variety.form, skin: variety.fruitSkin)
+            }
+        }
+        .frame(width: 40, height: 40)
+    }
+
     private func untriedRow(_ variety: CatalogueEntry) -> some View {
         HStack {
+            shopFruit(variety.id)
             VStack(alignment: .leading, spacing: 2) {
                 Text(variety.name)
                     .font(OrchardFont.title(17))

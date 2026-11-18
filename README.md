@@ -103,7 +103,7 @@ The notes in the JSON point at the page used for that row. The main ones are:
 
 ## Art
 
-Sprites are transparent PNGs in `Assets.xcassets`, one imageset per name. If an image is missing, the screen draws a simple stand-in. Fruit icons also still accept the older `variety-<id>` name.
+The approved sprite pack is in `Assets.xcassets`, one universal imageset per name, with alpha kept. If an image is missing, the screen draws a simple stand-in. Fruit icons also still accept the older `variety-<id>` name.
 
 | Asset | Used for |
 | --- | --- |

@@ -38,7 +38,10 @@ struct FarmMapView: View {
             .allowsHitTesting(false)
             ForEach(drawables(viewport: frame)) { item in
                 drawableView(item)
-                    .position(item.point)
+                    .position(
+                        x: item.point.x,
+                        y: item.anchorsBase ? item.point.y - item.foot / 2 : item.point.y
+                    )
                     .zIndex(item.depth)
             }
             if let hover {
@@ -72,19 +75,19 @@ struct FarmMapView: View {
         let occupied = Set(records.map(\.tile))
         for plot in FarmExpansion.unlockedPlots(tastedCount: tastedCount) {
             for tile in plot.treeSpots where !occupied.contains(tile) {
-                items.append(MapDrawable(id: "sapling-\(tile.column)-\(tile.row)", depth: depth(tile), point: viewport.viewPoint(tile), visual: .sapling))
+                items.append(makeDrawable(id: "sapling-\(tile.column)-\(tile.row)", tile: tile, depth: depth(tile), viewport: viewport, visual: .sapling))
             }
             for tile in plot.bedSpots where !occupied.contains(tile) {
-                items.append(MapDrawable(id: "bed-\(tile.column)-\(tile.row)", depth: depth(tile), point: viewport.viewPoint(tile), visual: .emptyBed))
+                items.append(makeDrawable(id: "bed-\(tile.column)-\(tile.row)", tile: tile, depth: depth(tile), viewport: viewport, visual: .emptyBed))
             }
             for tile in plot.vineSpots where !occupied.contains(tile) {
-                items.append(MapDrawable(id: "vine-\(tile.column)-\(tile.row)", depth: depth(tile) - 0.1, point: viewport.viewPoint(tile), visual: .emptyVine))
+                items.append(makeDrawable(id: "vine-\(tile.column)-\(tile.row)", tile: tile, depth: depth(tile) - 0.1, viewport: viewport, visual: .emptyVine))
             }
         }
         for record in records {
             let tile = record.id == dragging ? (hover ?? record.tile) : record.tile
-            let point = viewport.viewPoint(tile)
-            items.append(MapDrawable(id: record.id.uuidString, depth: depth(tile) + record.kind.depthBias, point: point, visual: visual(for: record)))
+            let visual = visual(for: record)
+            items.append(makeDrawable(id: record.id.uuidString, tile: tile, depth: depth(tile) + record.kind.depthBias, viewport: viewport, visual: visual))
         }
         return items.sorted { $0.depth < $1.depth }
     }
@@ -113,70 +116,139 @@ struct FarmMapView: View {
         }
     }
 
+    private func makeDrawable(id: String, tile: FarmTile, depth: Double, viewport: FarmViewport, visual: MapVisual) -> MapDrawable {
+        let width = displayWidth(visual)
+        let foot = footHeight(visual, width: width)
+        return MapDrawable(
+            id: id,
+            depth: depth,
+            point: viewport.viewPoint(tile),
+            visual: visual,
+            foot: foot,
+            anchorsBase: visual.anchorsBase
+        )
+    }
+
+    /// House is the largest object. Trees sit a little wider than a tile. Beds cover the soil diamond.
+    private func displayWidth(_ visual: MapVisual) -> CGFloat {
+        switch visual {
+        case .house: 176
+        case .tractor: 136
+        case .fence: 100
+        case .path: IsoMap.tileWidth * 0.96
+        case .bush: 72
+        case .rock: 58
+        case .sapling: 44
+        case .emptyBed: 116
+        case .emptyVine: 14
+        case .plant(let info):
+            switch FarmExpansion.spotKind(zone: info.zone) {
+            case .tree: 112
+            case .bed: 120
+            case .vine: 118
+            }
+        }
+    }
+
+    private func footHeight(_ visual: MapVisual, width: CGFloat) -> CGFloat {
+        if let name = spriteName(visual), let image = FarmSprite.image(named: name), image.size.width > 0 {
+            return width * image.size.height / image.size.width
+        }
+        switch visual {
+        case .house: 130
+        case .tractor: 84
+        case .fence: 58
+        case .path: IsoMap.tileHeight * 0.96
+        case .bush: 52
+        case .rock: 36
+        case .sapling: 64
+        case .emptyBed: 58
+        case .emptyVine: 40
+        case .plant: 110
+        }
+    }
+
+    private func spriteName(_ visual: MapVisual) -> String? {
+        switch visual {
+        case .house(let tier): FarmSprite.house(tier)
+        case .tractor: FarmSprite.tractor
+        case .fence: FarmSprite.fence
+        case .bush: FarmSprite.bush
+        case .rock: FarmSprite.rock
+        case .sapling: FarmSprite.sapling
+        case .emptyBed: FarmSprite.emptyBed
+        case .plant(let info):
+            FarmSprite.plantName(zone: info.zone, category: info.category, varietyID: info.id, rating: info.rating)
+        case .path, .emptyVine:
+            nil
+        }
+    }
+
     @ViewBuilder
     private func drawableView(_ item: MapDrawable) -> some View {
+        let width = displayWidth(item.visual)
         switch item.visual {
         case .house(let tier):
-            sprite(FarmSprite.house(tier), width: 150, height: 130) {
-                FarmhouseArt(tier: tier).frame(width: 120, height: 100)
+            sprite(FarmSprite.house(tier), width: width, fallbackHeight: item.foot) {
+                FarmhouseArt(tier: tier)
             }
         case .tractor:
-            sprite(FarmSprite.tractor, width: 120, height: 84) {
-                TractorArt().frame(width: 100, height: 70)
+            sprite(FarmSprite.tractor, width: width, fallbackHeight: item.foot) {
+                TractorArt()
             }
         case .fence:
-            sprite(FarmSprite.fence, width: 78, height: 58) {
+            sprite(FarmSprite.fence, width: width, fallbackHeight: item.foot) {
                 RoundedRectangle(cornerRadius: 2)
                     .fill(Color.white)
-                    .frame(width: 46, height: 16)
                     .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color(white: 0.75), lineWidth: 1))
             }
         case .path:
             IsoDiamond()
                 .fill(OrchardColor.path)
                 .overlay(IsoDiamond().stroke(OrchardColor.pathEdge, lineWidth: 1))
-                .frame(width: IsoMap.tileWidth * 0.92, height: IsoMap.tileHeight * 0.92)
+                .frame(width: width, height: item.foot)
         case .bush:
-            sprite(FarmSprite.bush, width: 64, height: 52) {
-                Ellipse().fill(OrchardColor.grassDark).frame(width: 46, height: 28)
+            sprite(FarmSprite.bush, width: width, fallbackHeight: item.foot) {
+                Ellipse().fill(OrchardColor.grassDark)
             }
         case .rock:
-            sprite(FarmSprite.rock, width: 48, height: 36) {
-                Ellipse().fill(Color(white: 0.75)).frame(width: 34, height: 22)
+            sprite(FarmSprite.rock, width: width, fallbackHeight: item.foot) {
+                Ellipse().fill(Color(white: 0.75))
             }
         case .sapling:
-            sprite(FarmSprite.sapling, width: 54, height: 64) {
-                Capsule().fill(OrchardColor.leaf).frame(width: 16, height: 28)
+            sprite(FarmSprite.sapling, width: width, fallbackHeight: item.foot) {
+                Capsule().fill(OrchardColor.leaf)
             }
         case .emptyBed:
-            sprite(FarmSprite.emptyBed, width: 86, height: 58) {
-                IsoDiamond()
-                    .fill(OrchardColor.soil)
-                    .frame(width: 70, height: 36)
+            sprite(FarmSprite.emptyBed, width: width, fallbackHeight: item.foot) {
+                IsoDiamond().fill(OrchardColor.soil)
             }
         case .emptyVine:
             RoundedRectangle(cornerRadius: 2)
                 .fill(OrchardColor.wood)
-                .frame(width: 8, height: 36)
+                .frame(width: width, height: item.foot)
         case .plant(let info):
-            plantView(info)
+            plantView(info, width: width, foot: item.foot)
         }
     }
 
-    private func plantView(_ info: FarmPlantInfo) -> some View {
+    private func plantView(_ info: FarmPlantInfo, width: CGFloat, foot: CGFloat) -> some View {
         let name = FarmSprite.plantName(zone: info.zone, category: info.category, varietyID: info.id, rating: info.rating)
         let scale = FarmSprite.scale(for: info.rating)
-        return VStack(spacing: 2) {
-            sprite(name, width: 96, height: 110) {
-                fallbackPlant(info)
-            }
-            .scaleEffect(scale, anchor: .bottom)
+        return sprite(name, width: width, fallbackHeight: foot) {
+            fallbackPlant(info)
+        }
+        .scaleEffect(scale, anchor: .bottom)
+        .overlay(alignment: .bottom) {
             Text(info.name)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(OrchardColor.ink)
+                .lineLimit(1)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .background(.ultraThinMaterial, in: Capsule())
+                .fixedSize()
+                .offset(y: 16)
         }
     }
 
@@ -192,17 +264,17 @@ struct FarmMapView: View {
         .opacity(FarmSprite.usesWiltingTree(zone: info.zone, rating: info.rating) ? 0.75 : 1)
     }
 
-    private func sprite<Fallback: View>(_ name: String, width: CGFloat, height: CGFloat, @ViewBuilder fallback: () -> Fallback) -> some View {
-        Group {
-            if let image = FarmSprite.image(named: name) {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-            } else {
-                fallback()
-            }
+    @ViewBuilder
+    private func sprite<Fallback: View>(_ name: String, width: CGFloat, fallbackHeight: CGFloat, @ViewBuilder fallback: () -> Fallback) -> some View {
+        if let image = FarmSprite.image(named: name), image.size.width > 0 {
+            Image(uiImage: image)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: width, height: width * image.size.height / image.size.width)
+        } else {
+            fallback()
+                .frame(width: width, height: fallbackHeight, alignment: .bottom)
         }
-        .frame(width: width, height: height)
     }
 }
 
@@ -211,6 +283,9 @@ private struct MapDrawable: Identifiable {
     var depth: Double
     var point: CGPoint
     var visual: MapVisual
+    /// Height of the sprite whose base sits on the tile centre.
+    var foot: CGFloat
+    var anchorsBase: Bool
 }
 
 private enum MapVisual {
@@ -224,6 +299,11 @@ private enum MapVisual {
     case emptyBed
     case emptyVine
     case plant(FarmPlantInfo)
+
+    var anchorsBase: Bool {
+        if case .path = self { return false }
+        return true
+    }
 }
 
 private extension FarmItemKind {
