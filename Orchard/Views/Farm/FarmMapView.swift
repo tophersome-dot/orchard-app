@@ -341,6 +341,7 @@ struct FarmMapView: View {
         let spot = FarmExpansion.spotKind(zone: info.zone)
         let stamp = spot == .vine ? FarmSprite.arborAnchor(varietyID: info.id) : FarmSprite.cropAnchor(varietyID: info.id)
         let tileWidth = IsoMap.tileWidth * (spot == .vine ? 1 : 0.85) * camera.scale
+        let name = spot == .vine ? FarmSprite.arbor(varietyID: info.id) : FarmSprite.crop(varietyID: info.id)
         return makeAnchored(
             id: "crop-\(id)",
             name: name,
@@ -437,7 +438,7 @@ struct FarmMapView: View {
             let union = diamondUnion(tiles, in: size)
             let resolved = context.resolve(Image(name))
             context.drawLayer { layer in
-                layer.clip(to: union)
+                layer.clip(to: union, style: FillStyle(eoFill: false))
                 drawWarped(resolved, layer: &layer, size: size)
             }
         }
@@ -450,10 +451,11 @@ struct FarmMapView: View {
         }
     }
 
+    /// One path for the whole group. Each diamond is grown by half a point so the anti-aliased edges overlap and no seam shows between cells.
     private func diamondUnion(_ tiles: Set<FarmTile>, in size: CGSize) -> Path {
         var union = Path()
-        let halfWidth = IsoMap.halfWidth * camera.scale
-        let halfHeight = IsoMap.halfHeight * camera.scale
+        let halfWidth = IsoMap.halfWidth * camera.scale + 0.5
+        let halfHeight = IsoMap.halfHeight * camera.scale + 0.5
         for tile in tiles {
             let center = camera.screenPoint(IsoMap.center(tile), in: size)
             union.move(to: CGPoint(x: center.x, y: center.y - halfHeight))
