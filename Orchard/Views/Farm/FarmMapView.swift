@@ -439,7 +439,8 @@ struct FarmMapView: View {
             let resolved = context.resolve(Image(name))
             context.drawLayer { layer in
                 layer.clip(to: union, style: FillStyle(eoFill: false))
-                drawWarped(resolved, layer: &layer, size: size)
+                let pixelsPerCell: CGFloat = kind == .tilled ? 128 : 256
+                drawWarped(resolved, layer: &layer, size: size, pixelsPerCell: pixelsPerCell)
             }
         }
         for (kind, tiles) in fills {
@@ -467,13 +468,14 @@ struct FarmMapView: View {
         return union
     }
 
-    /// Texture pixel (px, py) maps through world (px/512, py/512) into the iso grid.
-    private func drawWarped(_ image: GraphicsContext.ResolvedImage, layer: inout GraphicsContext, size: CGSize) {
+    /// One texture covers several cells, in world space, so its wrap does not sit on every cell edge.
+    /// Tilled soil is 128 app pixels per cell (four furrows). The other grounds are 256.
+    private func drawWarped(_ image: GraphicsContext.ResolvedImage, layer: inout GraphicsContext, size: CGSize, pixelsPerCell: CGFloat) {
         let tile = IsoMap.tileWidth
         let zoom = camera.scale
         let span: CGFloat = 512
-        let a = zoom * (tile / 2) / span
-        let b = zoom * (tile / 4) / span
+        let a = zoom * (tile / 2) / pixelsPerCell
+        let b = zoom * (tile / 4) / pixelsPerCell
         let transform = CGAffineTransform(
             a: a, b: b,
             c: -a, d: b,
@@ -487,6 +489,7 @@ struct FarmMapView: View {
             CGPoint(x: 0, y: size.height),
             CGPoint(x: size.width, y: size.height)
         ].map { $0.applying(inverse) }
+        let bleed: CGFloat = 2
         let minX = (corners.map(\.x).min() ?? 0) - span
         let maxX = (corners.map(\.x).max() ?? 0) + span
         let minY = (corners.map(\.y).min() ?? 0) - span
@@ -498,7 +501,15 @@ struct FarmMapView: View {
         layer.concatenate(transform)
         for row in firstRow...lastRow {
             for column in firstColumn...lastColumn {
-                layer.draw(image, in: CGRect(x: CGFloat(column) * span, y: CGFloat(row) * span, width: span, height: span))
+                layer.draw(
+                    image,
+                    in: CGRect(
+                        x: CGFloat(column) * span - bleed,
+                        y: CGFloat(row) * span - bleed,
+                        width: span + bleed * 2,
+                        height: span + bleed * 2
+                    )
+                )
             }
         }
     }
