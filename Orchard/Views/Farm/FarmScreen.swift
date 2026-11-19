@@ -27,7 +27,8 @@ private enum FarmTool: Hashable {
         case .paint(.sand): "icon_terrain_sand"
         case .paint(.longgrass): "icon_terrain_longgrass"
         case .paint(.path): "icon_terrain_path"
-        case .paint: "icon_terrain_grass"
+        case .paint(nil): "icon_terrain_grass"
+        case .paint(_): "icon_terrain_grass"
         }
     }
 }
@@ -39,6 +40,43 @@ private enum MapGesture {
     case place
 }
 
+/// Zoom factors are multiples of the fit-to-farm scale.
+private enum FarmZoom {
+    static let minimum: CGFloat = 0.5
+    static let maximum: CGFloat = 2.5
+    static let close: CGFloat = 1.6
+    static let labels: CGFloat = 1.25
+}
+
+private enum FarmViewMemory {
+    private static let key = "orchard.farm.camera"
+
+    struct Stored: Codable {
+        var scale: CGFloat
+        var centerX: CGFloat
+        var centerY: CGFloat
+        var panW: CGFloat
+        var panH: CGFloat
+    }
+
+    static func load() -> (scale: CGFloat, center: CGPoint, pan: CGSize)? {
+        guard let data = UserDefaults.standard.data(forKey: key),
+              let stored = try? JSONDecoder().decode(Stored.self, from: data),
+              stored.scale > 0 else { return nil }
+        return (
+            stored.scale,
+            CGPoint(x: stored.centerX, y: stored.centerY),
+            CGSize(width: stored.panW, height: stored.panH)
+        )
+    }
+
+    static func save(scale: CGFloat, center: CGPoint, pan: CGSize) {
+        let stored = Stored(scale: scale, centerX: center.x, centerY: center.y, panW: pan.width, panH: pan.height)
+        guard let data = try? JSONEncoder().encode(stored) else { return }
+        UserDefaults.standard.set(data, forKey: key)
+    }
+}
+
 struct FarmScreen: View {
     @Query private var placements: [FarmPlacement]
     @Query(sort: \Variety.name) private var varieties: [Variety]
@@ -48,13 +86,28 @@ struct FarmScreen: View {
     @State private var tool: FarmTool = .move
     @State private var paintStroke: [FarmTile: FarmItemKind?] = [:]
     @State private var undo: [[FarmRecord]] = []
-    @State private var scale: CGFloat = 1
-    @State private var lastScale: CGFloat = 1
-    @State private var offset: CGSize = .zero
-    @State private var lastOffset: CGSize = .zero
-    @State private var worldCenter: CGPoint = .zero
-    @State private var framed = false
-    @State private var userMoved = false
+    @State private var scale: CGFloat
+    @State private var lastScale: CGFloat
+    @State private var offset: CGSize
+    @State private var lastOffset: CGSize
+    @State private var worldCenter: CGPoint
+    @State private var framed: Bool
+    @State private var userMoved: Bool
+    @State private var mapSize: CGSize = .zero
+    @State private var pinchStartScale: CGFloat = 1
+    @State private var pinchWorld: CGPoint = .zero
+    @State private var oneFingerPoint: CGPoint?
+
+    init() {
+        let saved = FarmViewMemory.load()
+        _scale = State(initialValue: saved?.scale ?? 1)
+        _lastScale = State(initialValue: saved?.scale ?? 1)
+        _offset = State(initialValue: saved?.pan ?? .zero)
+        _lastOffset = State(initialValue: saved?.pan ?? .zero)
+        _worldCenter = State(initialValue: saved?.center ?? .zero)
+        _framed = State(initialValue: saved != nil)
+        _userMoved = State(initialValue: saved != nil)
+    }
     @State private var scenery = false
     @State private var frameRequest = 0
     @State private var selected: VarietyLink?
@@ -112,6 +165,8 @@ struct FarmScreen: View {
 
     var body: some View {
         GeometryReader { geo in
+            let shown = resolvedCamera(in: geo.size)
+            let namesVisible = shown.scale >= fitScale(in: geo.size) * FarmZoom.labels
             ZStack {
                 FarmColor.freshGrass
                 FarmMapView(
@@ -121,47 +176,46 @@ struct FarmScreen: View {
                     hover: hover,
                     hoverValid: hoverValid,
                     dragging: dragging,
-                    showsNames: scale >= 1.25,
+                    showsNames: namesVisible,
                     detailed: scenery,
-                    camera: resolvedCamera(in: geo.size),
+                    camera: shown,
                     canvasSize: geo.size,
                     terrain: displayTerrain,
                     hoverTiles: hoverFootprint
                 )
-                if tool.isBrush {
-                    MapBrushOverlay(
-                        onPaint: { from, to in paint(from: from, to: to, in: geo.size) },
-                        onPaintEnd: { commitPaint() },
-                        onPan: { translation, state in
-                            userMoved = true
-                            if state == .changed {
-                                offset = CGSize(width: lastOffset.width + translation.width, height: lastOffset.height + translation.height)
-                            } else if state == .ended || state == .cancelled {
-                                lastOffset = offset
-                            }
-                        },
-                        onPinch: { magnification, state in
-                            userMoved = true
-                            if state == .changed {
-                                scale = min(1.7, max(0.32, lastScale * magnification))
-                            } else if state == .ended || state == .cancelled {
-                                lastScale = scale
-                            }
-                        }
-                    )
-                }
+                MapGestureOverlay(
+                    brush: tool.isBrush && editing,
+                    onPinch: { magnification, point, state in
+                        handlePinch(magnification, at: point, state: state, in: geo.size)
+                    },
+                    onTwoPan: { translation, state in
+                        handleTwoPan(translation, state: state)
+                    },
+                    onOnePan: { start, current, translation, state in
+                        handleOnePan(start: start, current: current, translation: translation, state: state, in: geo.size)
+                    },
+                    onDoubleTap: { point in
+                        toggleZoom(at: point, in: geo.size)
+                    },
+                    onSingleTap: { point in
+                        guard !editing, let slug = plantSlug(at: point, in: geo.size) else { return }
+                        selected = VarietyLink(id: slug)
+                    }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .contentShape(Rectangle())
-            .gesture(drag(in: geo.size))
-            .simultaneousGesture(pinch)
             .onAppear {
+                mapSize = geo.size
                 frameHouse(in: geo.size)
                 if DebugLaunch.demoTerrain { editing = true }
             }
+            .onDisappear { saveCamera() }
+            .onChange(of: geo.size) { _, newSize in mapSize = newSize }
             .onChange(of: frameRequest) { _, _ in frameHouse(in: geo.size) }
         }
         .overlay(alignment: .top) { topBar }
         .overlay(alignment: .bottom) { editBar }
+        .overlay(alignment: .bottomTrailing) { zoomButtons }
         .sheet(item: $selected) { link in
             VarietyDetailView(slug: link.id)
         }
@@ -297,72 +351,187 @@ struct FarmScreen: View {
         .background(selected ? Color.white.opacity(0.7) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
     }
 
-    private func drag(in viewSize: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                let travel = hypot(value.translation.width, value.translation.height)
-                if gesture == .undecided {
-                    if editing, tool == .move, let hit = item(at: value.startLocation, in: viewSize) {
-                        gesture = .moveItem
-                        dragging = hit.id
-                    } else if travel > 8 {
-                        gesture = .pan
-                        userMoved = true
-                    }
-                }
-                switch gesture {
-                case .pan:
-                    offset = CGSize(
-                        width: lastOffset.width + value.translation.width,
-                        height: lastOffset.height + value.translation.height
-                    )
-                case .moveItem:
-                    let tile = tile(at: value.location, in: viewSize)
-                    if tile != hover {
-                        if hover != nil {
-                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        }
-                        hover = tile
-                    }
-                    hoverValid = placementValid(tile)
-                case .place, .undecided:
-                    break
-                }
+    private func handleOnePan(start: CGPoint, current: CGPoint, translation: CGSize, state: UIGestureRecognizer.State, in viewSize: CGSize) {
+        let travel = hypot(translation.width, translation.height)
+        if state == .began || gesture == .undecided {
+            if editing, tool.isBrush {
+                gesture = .place
+            } else if editing, tool == .move, let hit = item(at: start, in: viewSize) {
+                gesture = .moveItem
+                dragging = hit.id
+            } else if travel > 6 {
+                gesture = .pan
+                userMoved = true
             }
-            .onEnded { value in
-                let travel = hypot(value.translation.width, value.translation.height)
-                switch gesture {
-                case .pan:
-                    lastOffset = offset
-                case .moveItem:
-                    if hoverValid, let hover, let dragging, records.first(where: { $0.id == dragging })?.tile != hover {
-                        commit { records in
-                            guard let index = records.firstIndex(where: { $0.id == dragging }) else { return }
-                            records[index].tile = hover
-                        }
-                    }
-                case .undecided, .place:
-                    if travel < 14 {
-                        if editing, tool != .move {
-                            placeTool(at: tile(at: value.location, in: viewSize))
-                        } else if !editing, let slug = plantSlug(at: value.startLocation, in: viewSize) {
-                            selected = VarietyLink(id: slug)
-                        }
+        }
+        switch gesture {
+        case .pan:
+            userMoved = true
+            offset = CGSize(width: lastOffset.width + translation.width, height: lastOffset.height + translation.height)
+        case .moveItem:
+            let next = tile(at: current, in: viewSize)
+            if next != hover {
+                if hover != nil {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }
+                hover = next
+            }
+            hoverValid = placementValid(next)
+        case .place:
+            let origin = oneFingerPoint ?? start
+            paint(from: origin, to: current, in: viewSize)
+            oneFingerPoint = current
+        case .undecided:
+            break
+        }
+        if state == .ended || state == .cancelled || state == .failed {
+            oneFingerPoint = nil
+            if gesture == .pan {
+                lastOffset = offset
+                saveCamera()
+            } else if gesture == .moveItem {
+                if hoverValid, let hover, let dragging, records.first(where: { $0.id == dragging })?.tile != hover {
+                    commit { records in
+                        guard let index = records.firstIndex(where: { $0.id == dragging }) else { return }
+                        records[index].tile = hover
                     }
                 }
-                clearGesture()
+            } else if gesture == .place {
+                commitPaint()
             }
+            clearGesture()
+        }
     }
 
-    private var pinch: some Gesture {
-        MagnificationGesture()
-            .onChanged { value in
-                userMoved = true
-                scale = min(1.7, max(0.32, lastScale * value))
-            }
-            .onEnded { _ in
-                lastScale = scale
-            }
+    private func handleTwoPan(_ translation: CGSize, state: UIGestureRecognizer.State) {
+        userMoved = true
+        if state == .changed || state == .began {
+            offset = CGSize(width: lastOffset.width + translation.width, height: lastOffset.height + translation.height)
+        }
+        if state == .ended || state == .cancelled || state == .failed {
+            lastOffset = offset
+            saveCamera()
+        }
+    }
+
+    private func handlePinch(_ magnification: CGFloat, at point: CGPoint, state: UIGestureRecognizer.State, in viewSize: CGSize) {
+        switch state {
+        case .began:
+            userMoved = true
+            pinchStartScale = scale
+            pinchWorld = resolvedCamera(in: viewSize).worldPoint(point, in: viewSize)
+        case .changed:
+            let range = zoomRange(in: viewSize)
+            let next = rubber(pinchStartScale * magnification, min: range.min, max: range.max)
+            scale = next
+            offset = pan(keeping: pinchWorld, at: point, scale: next, in: viewSize)
+        case .ended, .cancelled, .failed:
+            settleZoom(keeping: pinchWorld, at: point, in: viewSize)
+        default:
+            break
+        }
+    }
+
+    private func zoomRange(in viewSize: CGSize) -> (min: CGFloat, max: CGFloat) {
+        let fit = fitScale(in: viewSize)
+        return (fit * FarmZoom.minimum, fit * FarmZoom.maximum)
+    }
+
+    private func fitScale(in viewSize: CGSize) -> CGFloat {
+        max(fittedCamera(in: viewSize).scale, 0.05)
+    }
+
+    private func rubber(_ proposed: CGFloat, min minimum: CGFloat, max maximum: CGFloat) -> CGFloat {
+        if proposed < minimum {
+            return minimum - (minimum - proposed) * 0.28
+        }
+        if proposed > maximum {
+            return maximum + (proposed - maximum) * 0.28
+        }
+        return proposed
+    }
+
+    private func pan(keeping world: CGPoint, at screen: CGPoint, scale newScale: CGFloat, in viewSize: CGSize) -> CGSize {
+        CGSize(
+            width: screen.x - viewSize.width / 2 - (world.x - worldCenter.x) * newScale,
+            height: screen.y - viewSize.height / 2 - (world.y - worldCenter.y) * newScale
+        )
+    }
+
+    private func settleZoom(keeping world: CGPoint, at screen: CGPoint, in viewSize: CGSize) {
+        let range = zoomRange(in: viewSize)
+        let clamped = min(range.max, max(range.min, scale))
+        let settled = pan(keeping: world, at: screen, scale: clamped, in: viewSize)
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+            scale = clamped
+            offset = settled
+            lastScale = clamped
+            lastOffset = settled
+        }
+        saveCamera(scale: clamped, pan: settled)
+    }
+
+    private func toggleZoom(at point: CGPoint, in viewSize: CGSize) {
+        userMoved = true
+        let fit = fittedCamera(in: viewSize)
+        let close = fit.scale * FarmZoom.close
+        let atClose = abs(scale - close) < fit.scale * 0.12
+        let tapped = resolvedCamera(in: viewSize).worldPoint(point, in: viewSize)
+        let nextScale = atClose ? fit.scale : close
+        let nextCenter = atClose ? fit.center : tapped
+        withAnimation(.easeInOut(duration: 0.28)) {
+            scale = nextScale
+            worldCenter = nextCenter
+            offset = .zero
+            lastScale = nextScale
+            lastOffset = .zero
+        }
+        saveCamera(scale: nextScale, center: nextCenter, pan: .zero)
+    }
+
+    private func nudgeZoom(_ factor: CGFloat) {
+        guard mapSize.width > 1 else { return }
+        userMoved = true
+        let range = zoomRange(in: mapSize)
+        let next = min(range.max, max(range.min, scale * factor))
+        let focus = CGPoint(x: mapSize.width / 2, y: mapSize.height / 2)
+        let world = resolvedCamera(in: mapSize).worldPoint(focus, in: mapSize)
+        let shifted = pan(keeping: world, at: focus, scale: next, in: mapSize)
+        withAnimation(.easeOut(duration: 0.18)) {
+            scale = next
+            offset = shifted
+            lastScale = next
+            lastOffset = shifted
+        }
+        saveCamera(scale: next, pan: shifted)
+    }
+
+    private func saveCamera() {
+        saveCamera(scale: scale, center: worldCenter, pan: offset)
+    }
+
+    private func saveCamera(scale: CGFloat, center: CGPoint? = nil, pan: CGSize) {
+        FarmViewMemory.save(scale: scale, center: center ?? worldCenter, pan: pan)
+    }
+
+    private var zoomButtons: some View {
+        VStack(spacing: 8) {
+            zoomButton("plus") { nudgeZoom(1.25) }
+            zoomButton("minus") { nudgeZoom(1 / 1.25) }
+        }
+        .padding(.trailing, 12)
+        .padding(.bottom, editing ? 76 : 12)
+    }
+
+    private func zoomButton(_ symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(OrchardColor.ink)
+                .frame(width: 36, height: 36)
+                .background(.ultraThinMaterial, in: Circle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func clearGesture() {
@@ -470,16 +639,6 @@ struct FarmScreen: View {
         }
     }
 
-    private func placeTool(at tile: FarmTile) {
-        let kind: FarmItemKind = tool == .fence ? .fence : .path
-        let occupied = Set(records.map(\.tile))
-        let reserved = FarmExpansion.reservedTiles(in: records)
-        guard FarmExpansion.canPlace(kind: kind, spot: nil, on: tile, tastedCount: tastedCount, occupied: occupied, reserved: reserved) else { return }
-        commit { records in
-            records.append(FarmRecord(id: UUID(), kind: kind, varietyID: nil, tile: tile))
-        }
-    }
-
     private func commit(_ change: (inout [FarmRecord]) -> Void) {
         var next = records
         undo.append(next)
@@ -520,11 +679,13 @@ struct FarmScreen: View {
     }
 }
 
-private struct MapBrushOverlay: UIViewRepresentable {
-    var onPaint: (CGPoint, CGPoint) -> Void
-    var onPaintEnd: () -> Void
-    var onPan: (CGSize, UIGestureRecognizer.State) -> Void
-    var onPinch: (CGFloat, UIGestureRecognizer.State) -> Void
+private struct MapGestureOverlay: UIViewRepresentable {
+    var brush: Bool
+    var onPinch: (CGFloat, CGPoint, UIGestureRecognizer.State) -> Void
+    var onTwoPan: (CGSize, UIGestureRecognizer.State) -> Void
+    var onOnePan: (CGPoint, CGPoint, CGSize, UIGestureRecognizer.State) -> Void
+    var onDoubleTap: (CGPoint) -> Void
+    var onSingleTap: (CGPoint) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -534,16 +695,26 @@ private struct MapBrushOverlay: UIViewRepresentable {
         let view = UIView()
         view.backgroundColor = .clear
         view.isMultipleTouchEnabled = true
-        let paint = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.paint(_:)))
-        paint.minimumNumberOfTouches = 1
-        paint.maximumNumberOfTouches = 1
-        let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.pan(_:)))
-        pan.minimumNumberOfTouches = 2
-        pan.maximumNumberOfTouches = 2
         let pinch = UIPinchGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.pinch(_:)))
-        view.addGestureRecognizer(paint)
-        view.addGestureRecognizer(pan)
+        let two = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.twoPan(_:)))
+        two.minimumNumberOfTouches = 2
+        two.maximumNumberOfTouches = 2
+        let one = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.onePan(_:)))
+        one.minimumNumberOfTouches = 1
+        one.maximumNumberOfTouches = 1
+        let doubleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.doubleTap(_:)))
+        doubleTap.numberOfTapsRequired = 2
+        let singleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.singleTap(_:)))
+        singleTap.require(toFail: doubleTap)
+        one.require(toFail: doubleTap)
+        pinch.delegate = context.coordinator
+        two.delegate = context.coordinator
+        context.coordinator.pinch = pinch
         view.addGestureRecognizer(pinch)
+        view.addGestureRecognizer(two)
+        view.addGestureRecognizer(one)
+        view.addGestureRecognizer(doubleTap)
+        view.addGestureRecognizer(singleTap)
         return view
     }
 
@@ -551,38 +722,50 @@ private struct MapBrushOverlay: UIViewRepresentable {
         context.coordinator.parent = self
     }
 
-    final class Coordinator: NSObject {
-        var parent: MapBrushOverlay
-        var lastPaint: CGPoint?
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var parent: MapGestureOverlay
+        var pinch: UIPinchGestureRecognizer?
+        var oneStart: CGPoint?
 
-        init(_ parent: MapBrushOverlay) {
+        init(_ parent: MapGestureOverlay) {
             self.parent = parent
         }
 
-        @objc func paint(_ gesture: UIPanGestureRecognizer) {
-            let point = gesture.location(in: gesture.view)
-            switch gesture.state {
-            case .began:
-                lastPaint = point
-                parent.onPaint(point, point)
-            case .changed:
-                let start = lastPaint ?? point
-                parent.onPaint(start, point)
-                lastPaint = point
-            case .ended, .cancelled, .failed:
-                parent.onPaintEnd()
-                lastPaint = nil
-            default:
-                break
-            }
-        }
-
-        @objc func pan(_ gesture: UIPanGestureRecognizer) {
-            parent.onPan(gesture.translation(in: gesture.view), gesture.state)
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            let pinchInvolved = gestureRecognizer is UIPinchGestureRecognizer || other is UIPinchGestureRecognizer
+            let twoPan = (gestureRecognizer as? UIPanGestureRecognizer)?.minimumNumberOfTouches == 2
+                || (other as? UIPanGestureRecognizer)?.minimumNumberOfTouches == 2
+            return pinchInvolved && twoPan
         }
 
         @objc func pinch(_ gesture: UIPinchGestureRecognizer) {
-            parent.onPinch(gesture.scale, gesture.state)
+            parent.onPinch(gesture.scale, gesture.location(in: gesture.view), gesture.state)
+        }
+
+        @objc func twoPan(_ gesture: UIPanGestureRecognizer) {
+            if let pinch, pinch.state == .began || pinch.state == .changed { return }
+            parent.onTwoPan(gesture.translation(in: gesture.view), gesture.state)
+        }
+
+        @objc func onePan(_ gesture: UIPanGestureRecognizer) {
+            let point = gesture.location(in: gesture.view)
+            if gesture.state == .began {
+                oneStart = point
+            }
+            let start = oneStart ?? point
+            parent.onOnePan(start, point, gesture.translation(in: gesture.view), gesture.state)
+            if gesture.state == .ended || gesture.state == .cancelled || gesture.state == .failed {
+                oneStart = nil
+            }
+        }
+
+        @objc func doubleTap(_ gesture: UITapGestureRecognizer) {
+            parent.onDoubleTap(gesture.location(in: gesture.view))
+        }
+
+        @objc func singleTap(_ gesture: UITapGestureRecognizer) {
+            guard !parent.brush else { return }
+            parent.onSingleTap(gesture.location(in: gesture.view))
         }
     }
 }
