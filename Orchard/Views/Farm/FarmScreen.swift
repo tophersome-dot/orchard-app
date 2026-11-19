@@ -314,7 +314,7 @@ struct FarmScreen: View {
             .onChange(of: plantKey) { _, key in
                 noteNewPlants(key)
             }
-            .task { trackLaunchFlags() }
+            .task { await trackLaunchFlags() }
         }
         .coordinateSpace(name: "farm")
         .overlay(alignment: .top) { topBar }
