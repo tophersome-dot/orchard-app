@@ -5,9 +5,13 @@ final class WoodlandTests: XCTestCase {
     private let clearing = FarmExpansion.clearingTiles(for: FarmExpansion.plan(treeCount: 0, bedCount: 0, vineCount: 0))
 
     func testLevelOneIslandIsLargerAndStillGrows() {
-        XCTAssertEqual(Woodland.radius(level: 1), 12, accuracy: 0.001)
-        XCTAssertEqual(Woodland.radius(level: 20), 50, accuracy: 0.001)
+        XCTAssertEqual(Woodland.radius(level: 1), Woodland.levelOneFloor, accuracy: 0.001)
+        XCTAssertEqual(Woodland.radius(level: 30), 50, accuracy: 0.001)
         XCTAssertEqual(Woodland.radius(level: 2) - Woodland.radius(level: 1), Woodland.radiusGrowth, accuracy: 0.001)
+        let around = Woodland.radius(level: 1, around: clearing)
+        XCTAssertGreaterThanOrEqual(around, Woodland.levelOneFloor)
+        XCTAssertLessThan(around, 20)
+        XCTAssertEqual(Woodland.radius(level: 3, around: clearing) - around, Woodland.radiusGrowth * 2, accuracy: 0.01)
         XCTAssertEqual(Woodland.level(tastedCount: 0), 1)
         let start = Woodland.make(seed: 11, level: 1, clearing: clearing, blocked: [], woods: true)
         let grown = Woodland.make(seed: 11, level: 6, clearing: clearing, blocked: [], woods: true)

@@ -107,38 +107,30 @@ enum DebugLaunch {
     }
 
     /// Opens edit mode with the storage tray visible.
-    static var showStorage: Bool {
-        #if DEBUG
-        ProcessInfo.processInfo.arguments.contains("-showStorage")
-        #else
-        false
-        #endif
-    }
-
+    static var showStorage: Bool { flag("-showStorage") }
     /// Opens edit mode with a plant selected.
-    static var editSelection: Bool {
-        #if DEBUG
-        ProcessInfo.processInfo.arguments.contains("-editSelection")
-        #else
-        false
-        #endif
-    }
-
+    static var editSelection: Bool { flag("-editSelection") }
     /// Opens the axe with a tree frozen mid-fall.
-    static var axeClear: Bool {
-        #if DEBUG
-        ProcessInfo.processInfo.arguments.contains("-axeClear")
-        #else
-        false
-        #endif
-    }
+    static var axeClear: Bool { flag("-axeClear") }
+    /// Shows the first-run hint even if it was dismissed.
+    static var showHints: Bool { flag("-showHints") }
 
-    /// Shows the first-run hint bubbles even if they were dismissed.
-    static var showHints: Bool {
+    /// True when the process arguments or the argument-domain defaults include the flag.
+    /// A valued flag later in the list must not hide this one.
+    static func flag(_ name: String) -> Bool {
         #if DEBUG
-        ProcessInfo.processInfo.arguments.contains("-showHints")
+        let dashed = name.hasPrefix("-") ? name : "-" + name
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains(where: { $0.caseInsensitiveCompare(dashed) == .orderedSame }) { return true }
+        if args.contains(where: { $0.lowercased().hasPrefix(dashed.lowercased() + "=") }) { return true }
+        let key = String(dashed.dropFirst())
+        if UserDefaults.standard.bool(forKey: key) { return true }
+        if let text = UserDefaults.standard.string(forKey: key)?.lowercased(), text == "1" || text == "true" || text == "yes" {
+            return true
+        }
+        return false
         #else
-        false
+        return false
         #endif
     }
 

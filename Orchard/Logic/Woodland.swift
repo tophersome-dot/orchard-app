@@ -128,14 +128,15 @@ enum BridgeSpan: Equatable {
 
 /// Seeded island, woodland, and shore helpers. The same seed and level always rebuild the same coast.
 enum Woodland {
-    /// Starting island at collection level 1. About 40% larger than the first tight coast.
-    /// Farm clearing plus a modest wooded ring. The opening view frames this whole island.
-    static let levelOneRadius: Double = 12
+    /// Smallest level-1 radius when the clearing itself is tiny.
+    static let levelOneFloor: Double = 9
+    /// Woods beyond the edge of the clearing at level 1.
+    static let levelOneRing: Double = 4
     /// Each collection level adds two tiles of radius, until the island is about 50 tiles across.
     static let radiusGrowth: Double = 2
     static let radiusCap: Double = 50
     /// Bump when grove, water, or patch generation changes so existing saves rebuild.
-    static let generatorVersion = 6
+    static let generatorVersion = 7
 
     static func level(tastedCount: Int) -> Int {
         if let override = DebugLaunch.islandLevel {
@@ -144,9 +145,14 @@ enum Woodland {
         return max(1, tastedCount + 1)
     }
 
-    static func radius(level: Int) -> Double {
+    /// Level 1 is the clearing plus about a 4-tile ring of woods, and never under 9.
+    /// Each further level adds two tiles.
+    static func radius(level: Int, around clearing: Set<FarmTile> = []) -> Double {
+        let center = centroid(clearing)
+        let half = clearing.map { distance($0, center) }.max() ?? 0
+        let base = max(half + levelOneRing, levelOneFloor)
         let steps = Double(max(0, level - 1))
-        return min(radiusCap, levelOneRadius + steps * radiusGrowth)
+        return min(radiusCap, base + steps * radiusGrowth)
     }
 
     static func sprite(_ name: String) -> DecorSprite? {
@@ -311,7 +317,7 @@ enum Woodland {
         clearing: Set<FarmTile>,
         protected: Set<FarmTile>
     ) -> Set<FarmTile> {
-        let reachRadius = radius(level: level)
+        let reachRadius = radius(level: level, around: clearing)
         let reach = Int(ceil(reachRadius + reachRadius * 0.5)) + 2
         let originColumn = Int(center.x.rounded())
         let originRow = Int(center.y.rounded())
@@ -325,7 +331,7 @@ enum Woodland {
                 let distance = (dx * dx + dy * dy).squareRoot()
                 let broad = field(column, row, seed: seed, cell: 7, salt: 1)
                 let detail = field(column, row, seed: seed, cell: 3, salt: 2)
-                let wobble = (broad - 0.5) * reachRadius * 0.34 + (detail - 0.5) * reachRadius * 0.10
+                let wobble = (broad - 0.5) * 2.4 + (detail - 0.5) * 0.8
                 if distance <= reachRadius + wobble {
                     land.insert(tile)
                 }
@@ -369,7 +375,7 @@ enum Woodland {
         let coast = coastTiles(in: land)
         let inland = land.subtracting(protected).subtracting(coast)
         let lakeLand = inland.isEmpty ? land.subtracting(protected) : inland
-        let reach = radius(level: level)
+        let reach = radius(level: level, around: clearing)
         var pools: [Set<FarmTile>] = []
         let wanted = unit(seed, 3, 5, 30) < 0.55 ? 2 : 1
         var used = Set<FarmTile>()
@@ -662,7 +668,8 @@ enum Woodland {
     }
 
     private static func grassTints(ground: Set<FarmTile>, seed: UInt64, center: (x: Double, y: Double)) -> [GrassTint] {
-        let reach = Int(radius(level: 1)) + 8
+        let columns = ground.map(\.column)
+        let reach = max(((columns.max() ?? 0) - (columns.min() ?? 0)) / 2, 8)
         let originColumn = Int(center.x.rounded())
         let originRow = Int(center.y.rounded())
         var tints: [GrassTint] = []

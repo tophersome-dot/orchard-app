@@ -100,8 +100,8 @@ struct FarmScreen: View {
     @Query(sort: \Variety.name) private var varieties: [Variety]
     @Environment(\.modelContext) private var context
     @State private var previewStarter = FarmExpansion.starterRecords()
-    @State private var editing = false
-    @State private var tool: FarmTool = .move
+    @State private var editing = DebugLaunch.editSelection || DebugLaunch.axeClear || DebugLaunch.showStorage || DebugLaunch.demoTerrain
+    @State private var tool: FarmTool = DebugLaunch.axeClear ? .clear : .move
     @State private var paintStroke: [FarmTile: FarmItemKind?] = [:]
     @State private var decorStroke: [FarmTile: String] = [:]
     @State private var clearTiles: Set<FarmTile> = []
@@ -112,7 +112,7 @@ struct FarmScreen: View {
     @State private var selectedRecord: UUID?
     @State private var draggingDecor = false
     @State private var honorLaunchZoom: Bool
-    @State private var storageOpen = false
+    @State private var storageOpen = DebugLaunch.showStorage
     @State private var armedStorage: UUID?
     @State private var armedMove = false
     @State private var brushTile: FarmTile?
@@ -122,6 +122,8 @@ struct FarmScreen: View {
     @State private var sprouts: [String: Date] = [:]
     @State private var knownPlants: Set<UUID>?
     @State private var sawChart = false
+    @State private var playedLevel: Int?
+    @State private var allowGrowthBanner = false
     @State private var bannerText: String?
     @State private var shakeOffset: CGFloat = 0
     @State private var minimapHidden = false
@@ -313,10 +315,10 @@ struct FarmScreen: View {
         }
         .coordinateSpace(name: "farm")
         .overlay(alignment: .top) { topBar }
-        .overlay(alignment: .center) {
+        .overlay(alignment: .bottom) {
             if let step = activeHint, step != .edit {
                 FarmHintChip(step: step, onDismiss: advanceHint)
-                    .offset(y: step == .pinch ? -36 : 56)
+                    .padding(.bottom, step == .pinch ? 12 : 64)
             }
         }
         .overlay(alignment: .topTrailing) {
@@ -434,17 +436,22 @@ struct FarmScreen: View {
         }
     }
 
+    /// The island level. `-islandLevel` wins over the collection count, including in the ring.
     private var islandLevel: Int {
-        Woodland.level(tastedCount: tastedCount)
+        if let override = DebugLaunch.islandLevel {
+            return override
+        }
+        return Woodland.level(tastedCount: tastedCount)
     }
 
     private var topBar: some View {
-        let radius = Woodland.radius(level: islandLevel)
+        let clearing = FarmExpansion.clearingTiles(for: yardPlan)
+        let radius = Woodland.radius(level: islandLevel, around: clearing)
         let next = radius >= Woodland.radiusCap ? "Island is full" : "Next shore +\(Int(Woodland.radiusGrowth)) tiles"
         return FarmLevelHeader(
             level: islandLevel,
             progress: radius / Woodland.radiusCap,
-            detail: "\(tastedCount) collected · \(next)",
+            detail: "Level \(islandLevel) · \(tastedCount) collected · \(next)",
             soundOn: soundOn,
             editing: editing,
             onSound: {
@@ -870,9 +877,9 @@ struct FarmScreen: View {
     }
 
     private func zoomRange(in viewSize: CGSize) -> (min: CGFloat, max: CGFloat) {
-        let fit = fitScale(in: viewSize)
-        let land = landScale(in: viewSize)
-        return (min(land, fit), fit * FarmZoom.maximum)
+        let island = islandCamera(in: viewSize).scale
+        let farm = fittedCamera(in: viewSize).scale
+        return (min(island, farm), max(farm, island) * FarmZoom.maximum)
     }
 
     private func fitScale(in viewSize: CGSize) -> CGFloat {
@@ -912,20 +919,20 @@ struct FarmScreen: View {
     private func toggleZoom(at point: CGPoint, in viewSize: CGSize) {
         userMoved = true
         honorLaunchZoom = false
-        let fit = fittedCamera(in: viewSize)
-        let close = fit.scale * FarmZoom.close
-        let atClose = abs(scale - close) < fit.scale * 0.12
-        let tapped = resolvedCamera(in: viewSize).worldPoint(point, in: viewSize)
-        let nextScale = atClose ? fit.scale : close
-        let nextCenter = atClose ? fit.center : tapped
+        _ = point
+        let farm = fittedCamera(in: viewSize)
+        let island = islandCamera(in: viewSize)
+        let atFarm = abs(scale - farm.scale) < max(0.04, farm.scale * 0.12)
+        let next = atFarm ? island : farm
         withAnimation(.easeInOut(duration: 0.28)) {
-            scale = nextScale
-            worldCenter = nextCenter
+            scale = next.scale
+            worldCenter = next.center
             offset = .zero
-            lastScale = nextScale
+            lastScale = next.scale
             lastOffset = .zero
+            framed = true
         }
-        saveCamera(scale: nextScale, center: nextCenter, pan: .zero)
+        saveCamera(scale: next.scale, center: next.center, pan: .zero)
     }
 
     private func nudgeZoom(_ factor: CGFloat) {
@@ -995,7 +1002,7 @@ struct FarmScreen: View {
         let key = IslandChartCache.cacheKey(seed: seed, level: level, clearing: clearing, blocked: blocked, woods: woods)
         if key == chartKey, !chart.ground.isEmpty { return }
         chartKey = key
-        OrchardTiming.log("chart request level \(level) radius \(String(format: "%.1f", Woodland.radius(level: level))) seed \(seed)")
+        OrchardTiming.log("chart request level \(level) radius \(String(format: "%.1f", Woodland.radius(level: level, around: clearing))) seed \(seed) override \(String(describing: DebugLaunch.islandLevel))")
         Task {
             let next = await IslandChartCache.chart(key: key) {
                 Woodland.make(
@@ -1007,18 +1014,26 @@ struct FarmScreen: View {
                 )
             }
             guard chartKey == key else { return }
-            let grew = sawChart && next.ground.count > chart.ground.count + 8
+            let previousLevel = playedLevel
+            if playedLevel == nil {
+                Task {
+                    try? await Task.sleep(for: .seconds(3))
+                    allowGrowthBanner = true
+                }
+            }
+            playedLevel = level
             chart = next
             sawChart = true
             let shownScale = DebugLaunch.farmZoom ?? fittedCamera(in: mapSize).scale
-            OrchardTiming.log(String(format: "chart apply level %d radius %.1f ground %d shown %.3f", level, Woodland.radius(level: level), next.ground.count, Double(shownScale)))
+            OrchardTiming.log(String(format: "chart apply level %d radius %.1f ground %d shown %.3f ring %d", level, Woodland.radius(level: level, around: clearing), next.ground.count, Double(shownScale), islandLevel))
             if honorLaunchZoom, DebugLaunch.farmZoom != nil {
                 applyFarmZoom(in: mapSize)
             } else if !userMoved {
                 framed = false
                 frameHouse(in: mapSize)
             }
-            if grew {
+            applyDebugChrome()
+            if allowGrowthBanner, let previousLevel, level > previousLevel, DebugLaunch.islandLevel == nil {
                 celebrateGrowth()
             }
         }
@@ -1027,7 +1042,7 @@ struct FarmScreen: View {
     /// `-farmZoom` wins over the saved camera and the fit-to-farm scale.
     private func applyFarmZoom(in viewSize: CGSize) {
         guard let zoom = DebugLaunch.farmZoom, viewSize.width > 1, viewSize.height > 1 else { return }
-        let focus = cameraFitting(focusWorldPoints(), in: viewSize, margin: IsoMap.tileWidth)
+        let focus = cameraFitting(farmWorldPoints(), in: viewSize, margin: 0, fill: 0.90)
         scale = zoom
         lastScale = zoom
         worldCenter = focus.center
@@ -1651,6 +1666,7 @@ struct FarmScreen: View {
     }
 
     private func applyDebugChrome() {
+        OrchardTiming.log("debug chrome edit \(DebugLaunch.editSelection) storage \(DebugLaunch.showStorage) axe \(DebugLaunch.axeClear) hints \(DebugLaunch.showHints)")
         if DebugLaunch.editSelection || DebugLaunch.axeClear || DebugLaunch.showStorage {
             editing = true
         }
@@ -1684,6 +1700,35 @@ struct FarmScreen: View {
             StoredRecord(id: UUID(), kind: .rock, varietyID: nil, sprite: "rock_medium_a", scale: 1, flipped: false, rotation: 0)
         ]
         try? FarmLayout.writeStored(samples, in: context)
+    }
+
+    /// House, plants, tractor and fences, padded by about two tiles. Not the whole island.
+    private func farmWorldPoints() -> [CGPoint] {
+        var tiles: [FarmTile] = records.compactMap { record in
+            switch record.kind {
+            case .house, .plant, .tractor, .fence: return record.tile
+            default: return nil
+            }
+        }
+        if let house = records.first(where: { $0.kind == .house }) {
+            tiles.append(contentsOf: FarmExpansion.footprint(kind: .house, anchor: house.tile))
+        }
+        if tiles.isEmpty {
+            tiles = Array(FarmExpansion.clearingTiles(for: yardPlan))
+        }
+        let centers = tiles.map { IsoMap.center($0) }
+        guard let minX = centers.map(\.x).min(), let maxX = centers.map(\.x).max(),
+              let minY = centers.map(\.y).min(), let maxY = centers.map(\.y).max() else {
+            return occupiedWorldPoints()
+        }
+        let padX = IsoMap.tileWidth
+        let padY = IsoMap.tileHeight
+        return [
+            CGPoint(x: minX - padX, y: minY - padY),
+            CGPoint(x: maxX + padX, y: minY - padY),
+            CGPoint(x: maxX + padX, y: maxY + padY),
+            CGPoint(x: minX - padX, y: maxY + padY)
+        ]
     }
 
     /// World bounds of the land itself. The square of min/max column and row is much wider than the island.
@@ -1736,7 +1781,7 @@ struct FarmScreen: View {
         guard !clearing.isEmpty else { return [] }
         let column = clearing.reduce(0) { $0 + $1.column } / clearing.count
         let row = clearing.reduce(0) { $0 + $1.row } / clearing.count
-        let radius = Int(Woodland.levelOneRadius.rounded()) + 2
+        let radius = Int(Woodland.levelOneFloor.rounded()) + 2
         let diagonal = Int((Double(radius) / 2.squareRoot()).rounded(.down))
         var tiles = [
             FarmTile(column: column + radius, row: row),
@@ -1748,7 +1793,7 @@ struct FarmScreen: View {
             FarmTile(column: column + diagonal, row: row - diagonal),
             FarmTile(column: column - diagonal, row: row - diagonal)
         ]
-        if Woodland.radius(level: Woodland.level(tastedCount: tastedCount)) <= Woodland.levelOneRadius + 0.01 {
+        if Woodland.level(tastedCount: tastedCount) <= 1 {
             let columns = chart.ground.map(\.column)
             let rows = chart.ground.map(\.row)
             if let minColumn = columns.min(), let maxColumn = columns.max(), let minRow = rows.min(), let maxRow = rows.max() {
@@ -1784,8 +1829,14 @@ struct FarmScreen: View {
         }
     }
 
+    /// The opening view: farm items, plus about two tiles, across about 90% of the width.
     private func fittedCamera(in viewSize: CGSize) -> FarmCamera {
-        cameraFitting(focusWorldPoints(), in: viewSize, margin: 0)
+        cameraFitting(farmWorldPoints(), in: viewSize, margin: 0, fill: 0.90)
+    }
+
+    /// Far enough out to see the whole island.
+    private func islandCamera(in viewSize: CGSize) -> FarmCamera {
+        cameraFitting(focusWorldPoints(), in: viewSize, margin: 0, fill: 0.92)
     }
 
     /// Zoom at which every unlockable plot fits on screen.
@@ -1804,7 +1855,7 @@ struct FarmScreen: View {
         return min(viewSize.width * 0.92 / spanX, height * 0.92 / spanY)
     }
 
-    private func cameraFitting(_ focus: [CGPoint], in viewSize: CGSize, margin: CGFloat) -> FarmCamera {
+    private func cameraFitting(_ focus: [CGPoint], in viewSize: CGSize, margin: CGFloat, fill: CGFloat = 0.92) -> FarmCamera {
         guard viewSize.width > 1,
               let minX = focus.map(\.x).min(),
               let maxX = focus.map(\.x).max(),
@@ -1815,8 +1866,8 @@ struct FarmScreen: View {
         let spanX = max(maxX - minX, 1) + margin * 2
         let spanY = max(maxY - minY, 1) + margin
         let height = max(viewSize.height - 120, 1)
-        let widthFit = (viewSize.width * 0.92) / spanX
-        let heightFit = (height * 0.92) / spanY
+        let widthFit = (viewSize.width * fill) / spanX
+        let heightFit = (height * fill) / spanY
         let fitted = min(FarmZoom.maximum, min(widthFit, heightFit))
         let center = CGPoint(x: (minX + maxX) / 2, y: (minY + maxY) / 2)
         return FarmCamera(scale: fitted, center: center, pan: .zero)
@@ -1835,7 +1886,7 @@ struct FarmScreen: View {
         worldCenter = fitted.center
         offset = .zero
         lastOffset = .zero
-        OrchardTiming.log(String(format: "fit scale %.3f tile %.0fpt level %d ground %d", Double(fitted.scale), Double(fitted.scale * IsoMap.tileWidth), islandLevel, chart.ground.count))
+        OrchardTiming.log(String(format: "farm scale %.3f tile %.0fpt level %d ground %d", Double(fitted.scale), Double(fitted.scale * IsoMap.tileWidth), islandLevel, chart.ground.count))
     }
 }
 
