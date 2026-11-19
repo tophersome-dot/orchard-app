@@ -79,7 +79,7 @@ enum IslandChartCache {
         return "\(seed)|\(level)|\(columns.min() ?? 0)|\(columns.max() ?? 0)|\(rows.min() ?? 0)|\(rows.max() ?? 0)|\(blocked.count)|\(woods)"
     }
 
-    static func chart(key: String, build: @Sendable () -> IslandChart) async -> IslandChart {
+    static func chart(key: String, build: @escaping @Sendable () -> IslandChart) async -> IslandChart {
         lock.lock()
         if storedKey == key, !storedChart.ground.isEmpty {
             let hit = storedChart
@@ -88,7 +88,7 @@ enum IslandChartCache {
         }
         lock.unlock()
         let started = CFAbsoluteTimeGetCurrent()
-        let built = await Task.detached(priority: .userInitiated, operation: build).value
+        let built = await Task.detached(priority: .userInitiated) { build() }.value
         OrchardTiming.log(String(format: "island generate %.3fs ground %d decor %d", CFAbsoluteTimeGetCurrent() - started, built.ground.count, built.decor.count))
         lock.lock()
         storedKey = key
@@ -129,11 +129,13 @@ enum BridgeSpan: Equatable {
 /// Seeded island, woodland, and shore helpers. The same seed and level always rebuild the same coast.
 enum Woodland {
     /// Starting island at collection level 1. About 40% larger than the first tight coast.
-    static let levelOneRadius: Double = 22
-    /// Each collection level adds a clearly wider ring. Level 8 is more than twice level 1.
-    static let radiusGrowth: Double = 4
+    /// Farm clearing plus a modest wooded ring. The opening view frames this whole island.
+    static let levelOneRadius: Double = 12
+    /// Each collection level adds two tiles of radius, until the island is about 50 tiles across.
+    static let radiusGrowth: Double = 2
+    static let radiusCap: Double = 50
     /// Bump when grove, water, or patch generation changes so existing saves rebuild.
-    static let generatorVersion = 2
+    static let generatorVersion = 4
 
     static func level(tastedCount: Int) -> Int {
         if let override = DebugLaunch.islandLevel {
@@ -144,7 +146,7 @@ enum Woodland {
 
     static func radius(level: Int) -> Double {
         let steps = Double(max(0, level - 1))
-        return levelOneRadius + steps * radiusGrowth
+        return min(radiusCap, levelOneRadius + steps * radiusGrowth)
     }
 
     static func sprite(_ name: String) -> DecorSprite? {
@@ -206,6 +208,7 @@ enum Woodland {
                 groves: cover.groves,
                 glades: cover.glades,
                 lakes: waters.lakes,
+                creek: waters.creek,
                 seed: seed,
                 blocked: blocked
             )
@@ -372,20 +375,12 @@ enum Woodland {
         let wanted = unit(seed, 3, 5, 30) < 0.55 ? 2 : 1
         var used = Set<FarmTile>()
         for index in 0..<wanted {
-            let target = 3 + Int(mix(seed, index + 2, 9, 31) % 6)
             guard let start = inland
-                .filter({ !used.contains($0) && distance($0, center) > reach * 0.28 && distance($0, center) < reach * 0.72 })
+                .filter({ !used.contains($0) && distance($0, center) > reach * 0.34 && distance($0, center) < reach * 0.7 })
                 .min(by: { mix(seed, $0.column, $0.row, UInt64(40 + index)) < mix(seed, $1.column, $1.row, UInt64(40 + index)) })
             else { break }
-            var lake: Set<FarmTile> = [start]
-            while lake.count < target {
-                let options = lake
-                    .flatMap { orthogonal($0) }
-                    .filter { inland.contains($0) && !lake.contains($0) && !used.contains($0) && !protected.contains($0) }
-                guard let next = options.min(by: { mix(seed, $0.column, $0.row, 41) < mix(seed, $1.column, $1.row, 41) }) else { break }
-                lake.insert(next)
-            }
-            if lake.count >= 3 {
+            let lake = roundedLake(at: start, land: inland, protected: protected, seed: seed, salt: UInt64(40 + index))
+            if lake.count >= 6 {
                 pools.append(lake)
                 used.formUnion(lake)
                 for tile in lake {
@@ -396,8 +391,88 @@ enum Woodland {
             }
         }
         let lakes = pools.reduce(into: Set<FarmTile>()) { $0.formUnion($1) }
-        let creek = pools.first.map { creekLine(from: $0, land: land, avoid: protected.union(lakes), seed: seed, center: center) } ?? []
+        let creek = pools.first.map { widenedCreek(from: $0, land: land, avoid: protected.union(lakes), seed: seed, center: center) } ?? []
         return (lakes, creek)
+    }
+
+    /// An irregular disc, then a pass that knocks off spikes so the shore is rounded.
+    private static func roundedLake(
+        at start: FarmTile,
+        land: Set<FarmTile>,
+        protected: Set<FarmTile>,
+        seed: UInt64,
+        salt: UInt64
+    ) -> Set<FarmTile> {
+        let reach = 2.1 + unit(seed, start.column, start.row, salt) * 1.6
+        var lake = Set<FarmTile>()
+        for column in (start.column - 5)...(start.column + 5) {
+            for row in (start.row - 5)...(start.row + 5) {
+                let tile = FarmTile(column: column, row: row)
+                guard land.contains(tile), !protected.contains(tile) else { continue }
+                let dx = Double(column - start.column)
+                let dy = Double(row - start.row)
+                let noise = field(column, row, seed: seed, cell: 3, salt: salt &+ 2)
+                let limit = reach * (0.72 + 0.45 * noise)
+                if (dx * dx + dy * dy).squareRoot() <= limit {
+                    lake.insert(tile)
+                }
+            }
+        }
+        for _ in 0..<3 {
+            let drops = lake.filter { orthogonal($0).filter { lake.contains($0) }.count < 2 }
+            lake.subtract(drops)
+            var fill = Set<FarmTile>()
+            for tile in lake {
+                for neighbor in orthogonal(tile) where land.contains(neighbor) && !protected.contains(neighbor) && !lake.contains(neighbor) {
+                    if orthogonal(neighbor).filter({ lake.contains($0) }).count >= 3 {
+                        fill.insert(neighbor)
+                    }
+                }
+            }
+            lake.formUnion(fill)
+        }
+        return lake
+    }
+
+    /// A one-tile channel that wanders, then gains a second tile as it nears the sea.
+    private static func widenedCreek(
+        from lake: Set<FarmTile>,
+        land: Set<FarmTile>,
+        avoid: Set<FarmTile>,
+        seed: UInt64,
+        center: (x: Double, y: Double)
+    ) -> Set<FarmTile> {
+        let spine = creekLine(from: lake, land: land, avoid: avoid, seed: seed, center: center)
+        guard spine.count > 4 else { return spine }
+        let ordered = orderedCreek(spine, lake: lake, center: center)
+        var creek = spine
+        let mouth = max(3, ordered.count / 3)
+        for (index, tile) in ordered.enumerated() where index >= ordered.count - mouth {
+            let side = orthogonal(tile)
+                .filter { land.contains($0) && !avoid.contains($0) && !creek.contains($0) && !lake.contains($0) }
+                .max { unit(seed, $0.column, $0.row, 48) < unit(seed, $1.column, $1.row, 48) }
+            if let side {
+                creek.insert(side)
+            }
+        }
+        return creek
+    }
+
+    private static func orderedCreek(_ creek: Set<FarmTile>, lake: Set<FarmTile>, center: (x: Double, y: Double)) -> [FarmTile] {
+        guard let start = creek.min(by: { distance($0, center) < distance($1, center) }) else { return [] }
+        var ordered = [start]
+        var seen: Set<FarmTile> = [start]
+        while let last = ordered.last {
+            let next = orthogonal(last).filter { creek.contains($0) && !seen.contains($0) }
+            guard let step = next.first else { break }
+            seen.insert(step)
+            ordered.append(step)
+        }
+        if ordered.count < creek.count, let extra = creek.subtracting(seen).min(by: { distance($0, center) < distance($1, center) }) {
+            ordered.append(extra)
+        }
+        _ = lake
+        return ordered
     }
 
     private static func creekLine(
@@ -430,7 +505,7 @@ enum Woodland {
     }
 
     private static func scoreCreek(_ tile: FarmTile, seed: UInt64, center: (x: Double, y: Double)) -> Double {
-        distance(tile, center) + (unit(seed, tile.column, tile.row, 44) - 0.5) * 2.4
+        distance(tile, center) + (unit(seed, tile.column, tile.row, 44) - 0.5) * 5.5
     }
 
     private static func coverTiles(
@@ -497,6 +572,7 @@ enum Woodland {
         groves: Set<FarmTile>,
         glades: Set<FarmTile>,
         lakes: Set<FarmTile>,
+        creek: Set<FarmTile>,
         seed: UInt64,
         blocked: Set<FarmTile>
     ) -> [DecorRecord] {
@@ -520,18 +596,10 @@ enum Woodland {
         }
         for tile in groves {
             let roll = unit(seed, tile.column, tile.row, 9)
-            let cluster = field(tile.column, tile.row, seed: seed, cell: 4, salt: 8)
-            if frontZone.contains(tile) {
-                if roll < 0.55 {
-                    add(understory(seed: seed, tile: tile, salt: 10), tile, 10)
-                }
-                continue
-            }
-            // Groves are mostly canopy. Understory fills the gaps between trunks.
-            if cluster > 0.18 && roll < 0.78 {
-                add(tallTree(seed: seed, tile: tile), tile, 9)
-            } else if roll < 0.95 {
+            if frontZone.contains(tile) || roll >= 0.60 {
                 add(understory(seed: seed, tile: tile, salt: 10), tile, 10)
+            } else {
+                add(tallTree(seed: seed, tile: tile), tile, 9)
             }
         }
         let open = ground.subtracting(protected).subtracting(groves).subtracting(glades)
@@ -554,8 +622,17 @@ enum Woodland {
         for tile in tallEdges.prefix(3) where !placed.contains(tile) {
             add(tallTree(seed: seed, tile: tile), tile, 14)
         }
-        for tile in lakes where unit(seed, tile.column, tile.row, 15) < 0.42 {
+        for tile in lakes where unit(seed, tile.column, tile.row, 15) < 0.55 {
             add("lily_pads", tile, 15)
+        }
+        let banks = ground.filter { tile in
+            orthogonal(tile).contains { lakes.contains($0) || creek.contains($0) }
+        }
+        for tile in banks where unit(seed, tile.column, tile.row, 18) < 0.42 {
+            add("reeds", tile, 18)
+        }
+        for tile in creek where unit(seed, tile.column, tile.row, 19) < 0.28 {
+            add("lily_pads", tile, 19)
         }
         let shore = coastTiles(in: ground)
         for tile in shore {

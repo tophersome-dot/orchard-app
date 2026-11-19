@@ -31,6 +31,7 @@ struct FarmMapView: View {
     var chart: IslandChart = .placeholder
     var shoreSeed: UInt64 = 1
     @State private var terrainCache = TerrainDrawCache()
+    @State private var shoreCache = ShoreLoopCache()
 
     private var zones: [String: String] {
         Dictionary(uniqueKeysWithValues: plants.map { ($0.key, $0.value.zone) })
@@ -59,8 +60,7 @@ struct FarmMapView: View {
             }
             .allowsHitTesting(false)
             Canvas { context, size in
-                drawCliffs(in: context, size: size)
-                drawFoam(in: context, size: size)
+                drawSmoothedShore(in: context, size: size)
             }
             .allowsHitTesting(false)
             if detailed {
@@ -68,10 +68,7 @@ struct FarmMapView: View {
                     drawSprites(drawables(plan: plan), in: context, size: size)
                 }
                 .allowsHitTesting(false)
-                let labels = drawables(plan: plan).filter { item in
-                    if case .plant = item.visual { return true }
-                    return false
-                }
+                let labels = visibleLabels(in: drawables(plan: plan), canvas: canvasSize)
                 ForEach(labels) { item in
                     plantLabel(item)
                 }
@@ -595,16 +592,147 @@ struct FarmMapView: View {
 
     private func drawWater(in context: inout GraphicsContext, size: CGSize, drift: CGSize) {
         let ocean = context.resolve(Image(FarmSprite.waterOcean))
-        context.drawLayer { layer in
-            drawWarped(ocean, layer: &layer, size: size, pixelsPerCell: 128, drift: drift)
-        }
+        drawScreenTiles(ocean, in: &context, size: size, drift: drift)
         let bounds = visibleTileBounds(in: size, margin: 2)
         let lakes = chart.lakes.union(chart.creek).filter { bounds.contains($0) }
         guard !lakes.isEmpty else { return }
         let lake = context.resolve(Image(FarmSprite.waterLake))
+        let loops = smoothedWaterLoops()
+        let clip = screenPath(loops, in: size)
+        guard !clip.isEmpty else { return }
         context.drawLayer { layer in
-            layer.clip(to: diamondUnion(lakes, in: size), style: FillStyle(eoFill: false))
-            drawWarped(lake, layer: &layer, size: size, pixelsPerCell: 128, drift: drift)
+            layer.clip(to: clip, style: FillStyle(eoFill: true))
+            drawScreenTiles(lake, in: &layer, size: size, drift: drift)
+            for loop in loops {
+                shadeWaterDepth(loop, in: &layer, size: size)
+            }
+        }
+        let grassBank = context.resolve(Image(FarmSprite.edgeBankGrass))
+        let sandBank = context.resolve(Image(FarmSprite.edgeBankSand))
+        let band = IsoMap.tileWidth * 0.28 * camera.scale
+        for (index, loop) in loops.enumerated() {
+            let screen = loop.map { camera.screenPoint($0, in: size) }
+            let image = index.isMultiple(of: 3) ? sandBank : grassBank
+            drawTexturedBand(image, along: screen, width: band, in: context, canvas: size, fade: true, towardCenter: true)
+        }
+    }
+
+    private func smoothedWaterLoops() -> [[CGPoint]] {
+        let key = "water-\(chart.lakes.count)-\(chart.creek.count)"
+        if shoreCache.waterKey == key { return shoreCache.water }
+        let loops = boundaryLoops(of: chart.lakes.union(chart.creek)).map { chaikin($0, passes: 3) }
+        shoreCache.waterKey = key
+        shoreCache.water = loops
+        return loops
+    }
+
+    private func shadeWaterDepth(_ loop: [CGPoint], in layer: inout GraphicsContext, size: CGSize) {
+        let screen = loop.map { camera.screenPoint($0, in: size) }
+        guard !screen.isEmpty else { return }
+        let count = CGFloat(screen.count)
+        let centroid = screen.reduce(CGPoint.zero) { CGPoint(x: $0.x + $1.x, y: $0.y + $1.y) }
+        let middle = CGPoint(x: centroid.x / count, y: centroid.y / count)
+        let radius = screen.map { hypot($0.x - middle.x, $0.y - middle.y) }.max() ?? 0
+        guard radius > 2 else { return }
+        let gradient = Gradient(stops: [
+            .init(color: Color(red: 0.05, green: 0.28, blue: 0.42).opacity(0.38), location: 0),
+            .init(color: Color(red: 0.05, green: 0.28, blue: 0.42).opacity(0.08), location: 0.62),
+            .init(color: Color.white.opacity(0.16), location: 1)
+        ])
+        layer.fill(
+            Path(ellipseIn: CGRect(x: middle.x - radius, y: middle.y - radius * 0.62, width: radius * 2, height: radius * 1.24)),
+            with: .radialGradient(gradient, center: middle, startRadius: 0, endRadius: radius)
+        )
+    }
+
+    /// Square screen tiles, so the water ripples are not sheared into diagonal streaks.
+    private func drawScreenTiles(_ image: GraphicsContext.ResolvedImage, in context: inout GraphicsContext, size: CGSize, drift: CGSize) {
+        let pitch = max(IsoMap.tileWidth * 3.2 * camera.scale, 1)
+        let originX = drift.width.truncatingRemainder(dividingBy: pitch)
+        let originY = drift.height.truncatingRemainder(dividingBy: pitch)
+        let bleed: CGFloat = 2
+        var column = Int(floor(-originX / pitch)) - 1
+        let lastColumn = Int(ceil((size.width - originX) / pitch)) + 1
+        let firstRow = Int(floor(-originY / pitch)) - 1
+        let lastRow = Int(ceil((size.height - originY) / pitch)) + 1
+        while column <= lastColumn {
+            var row = firstRow
+            while row <= lastRow {
+                let rect = CGRect(
+                    x: originX + CGFloat(column) * pitch - bleed,
+                    y: originY + CGFloat(row) * pitch - bleed,
+                    width: pitch + bleed * 2,
+                    height: pitch + bleed * 2
+                )
+                context.draw(image, in: rect)
+                row += 1
+            }
+            column += 1
+        }
+    }
+
+    private func drawSmoothedShore(in context: GraphicsContext, size: CGSize) {
+        let loops = smoothedCoastLoops()
+        guard !loops.isEmpty else { return }
+        let cliff = context.resolve(Image("cliff_face_sw"))
+        let foam = context.resolve(Image(FarmSprite.edgeFoam))
+        let cliffWidth = IsoMap.tileWidth * 0.42 * camera.scale
+        let foamWidth = IsoMap.tileWidth * 0.25 * camera.scale
+        for loop in loops {
+            let screen = loop.map { camera.screenPoint($0, in: size) }
+            drawTexturedBand(cliff, along: screen, width: cliffWidth, in: context, canvas: size)
+            drawTexturedBand(foam, along: screen, width: foamWidth, in: context, canvas: size)
+        }
+    }
+
+    /// A soft strip centered on the outline, hanging toward the water.
+    private func drawTexturedBand(
+        _ image: GraphicsContext.ResolvedImage,
+        along points: [CGPoint],
+        width: CGFloat,
+        in context: GraphicsContext,
+        canvas size: CGSize,
+        fade: Bool = false,
+        towardCenter: Bool = false
+    ) {
+        guard points.count >= 2, width > 0.5 else { return }
+        let view = CGRect(origin: .zero, size: size).insetBy(dx: -width - 8, dy: -width - 8)
+        let center = points.reduce(CGPoint.zero) { CGPoint(x: $0.x + $1.x, y: $0.y + $1.y) }
+        let count = CGFloat(points.count)
+        let middle = CGPoint(x: center.x / count, y: center.y / count)
+        for index in points.indices {
+            let start = points[index]
+            let end = points[(index + 1) % points.count]
+            let mid = CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2)
+            guard view.contains(mid) else { continue }
+            let dx = end.x - start.x
+            let dy = end.y - start.y
+            let length = max(hypot(dx, dy), 0.001)
+            let along = CGPoint(x: dx / length, y: dy / length)
+            var outward = CGPoint(x: dy / length, y: -dx / length)
+            let inward = CGPoint(x: middle.x - mid.x, y: middle.y - mid.y)
+            let pointsInward = outward.x * inward.x + outward.y * inward.y > 0
+            if pointsInward != towardCenter {
+                outward = CGPoint(x: -outward.x, y: -outward.y)
+            }
+            let origin = CGPoint(x: start.x + outward.x * width, y: start.y + outward.y * width)
+            let transform = CGAffineTransform(a: along.x, b: along.y, c: -outward.x, d: -outward.y, tx: origin.x, ty: origin.y)
+            context.drawLayer { layer in
+                layer.concatenate(transform)
+                layer.draw(image, in: CGRect(x: 0, y: 0, width: length, height: width))
+                if fade {
+                    layer.blendMode = .destinationIn
+                    let fade = Gradient(stops: [
+                        .init(color: Color.white.opacity(0.05), location: 0),
+                        .init(color: Color.white.opacity(0.55), location: 0.45),
+                        .init(color: Color.white, location: 1)
+                    ])
+                    layer.fill(
+                        Path(CGRect(x: 0, y: 0, width: length, height: width)),
+                        with: .linearGradient(fade, startPoint: CGPoint(x: length / 2, y: 0), endPoint: CGPoint(x: length / 2, y: width))
+                    )
+                }
+            }
         }
     }
 
@@ -690,27 +818,55 @@ struct FarmMapView: View {
     }
 
     private func groundPath(in size: CGSize) -> Path {
-        let bounds = visibleTileBounds(in: size, margin: 2)
-        return diamondUnion(chart.ground.filter { bounds.contains($0) }, in: size)
+        screenPath(smoothedLandLoops(), in: size)
+    }
+
+    private func smoothedLandLoops() -> [[CGPoint]] {
+        let key = "land-\(chart.ground.count)-\(chart.lakes.count)-\(chart.creek.count)"
+        if shoreCache.landKey == key { return shoreCache.land }
+        let loops = boundaryLoops(of: chart.ground).map { chaikin($0, passes: 3) }
+        shoreCache.landKey = key
+        shoreCache.land = loops
+        return loops
+    }
+
+    private func smoothedCoastLoops() -> [[CGPoint]] {
+        let key = "coast-\(chart.ground.count)-\(chart.lakes.count)-\(chart.creek.count)"
+        if shoreCache.coastKey == key { return shoreCache.coast }
+        let mass = chart.ground.union(chart.water)
+        let loops = boundaryLoops(of: mass).map { chaikin($0, passes: 3) }
+        shoreCache.coastKey = key
+        shoreCache.coast = loops
+        return loops
     }
 
     private func drawTerrains(in context: GraphicsContext, size: CGSize) {
         let prepared = preparedTerrain()
         let bounds = visibleTileBounds(in: size, margin: 2)
         let view = CGRect(origin: .zero, size: size).insetBy(dx: -32, dy: -32)
+        let natural: Set<FarmItemKind> = [.forest, .longgrass, .dirt]
         for (kind, tiles) in prepared.fills {
             guard let name = FarmSprite.terrainFill(kind) else { continue }
-            let visible = tiles.filter { bounds.contains($0) }
-            guard !visible.isEmpty else { continue }
-            let union = diamondUnion(visible, in: size)
+            let union: Path
+            if natural.contains(kind), let loops = prepared.smooth[kind] {
+                union = screenPath(loops, in: size)
+            } else {
+                let visible = tiles.filter { bounds.contains($0) }
+                guard !visible.isEmpty else { continue }
+                union = diamondUnion(visible, in: size)
+            }
+            guard !union.isEmpty else { continue }
             let resolved = context.resolve(Image(name))
             context.drawLayer { layer in
-                layer.clip(to: union, style: FillStyle(eoFill: false))
+                layer.clip(to: union, style: FillStyle(eoFill: true))
                 let pixelsPerCell: CGFloat = kind == .tilled ? 128 : 256
                 drawWarped(resolved, layer: &layer, size: size, pixelsPerCell: pixelsPerCell)
+                if kind == .forest {
+                    layer.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.white.opacity(0.15)))
+                }
             }
         }
-        for (kind, edges) in prepared.edges {
+        for (kind, edges) in prepared.edges where !natural.contains(kind) {
             guard let name = FarmSprite.terrainEdge(kind) else { continue }
             let resolved = context.resolve(Image(name))
             let feather: CGFloat? = (kind == .forest || kind == .longgrass || kind == .dirt) ? 0.22 : nil
@@ -751,8 +907,10 @@ struct FarmMapView: View {
         }
         let order: [FarmItemKind] = [.forest, .longgrass, .dirt, .sand, .path, .tilled]
         let onIsland = chart.ground.union(chart.water)
+        let natural: Set<FarmItemKind> = [.forest, .longgrass, .dirt]
         var fills: [(FarmItemKind, Set<FarmTile>)] = []
         var edges: [(FarmItemKind, [(edge: FarmGridEdge, owner: FarmTile)])] = []
+        var smooth: [FarmItemKind: [[CGPoint]]] = [:]
         for kind in order {
             let tiles = Set(terrain.compactMap { (tile, painted) -> FarmTile? in
                 guard painted == kind else { return nil }
@@ -763,12 +921,17 @@ struct FarmMapView: View {
             })
             guard !tiles.isEmpty else { continue }
             fills.append((kind, tiles))
-            let boundary = FarmSurface.boundaryEdges(of: tiles).map { (edge: $0.edge, owner: $0.outwardFrom) }
-            edges.append((kind, boundary))
+            if natural.contains(kind) {
+                smooth[kind] = boundaryLoops(of: tiles).map { chaikin($0, passes: 3) }
+            } else {
+                let boundary = FarmSurface.boundaryEdges(of: tiles).map { (edge: $0.edge, owner: $0.outwardFrom) }
+                edges.append((kind, boundary))
+            }
         }
         terrainCache.key = key
         terrainCache.fills = fills
         terrainCache.edges = edges
+        terrainCache.smooth = smooth
         return terrainCache
     }
 
@@ -786,6 +949,121 @@ struct FarmMapView: View {
             union.closeSubpath()
         }
         return union
+    }
+
+    private func screenPath(_ loops: [[CGPoint]], in size: CGSize) -> Path {
+        var path = Path()
+        for loop in loops where loop.count >= 3 {
+            path.move(to: camera.screenPoint(loop[0], in: size))
+            for point in loop.dropFirst() {
+                path.addLine(to: camera.screenPoint(point, in: size))
+            }
+            path.closeSubpath()
+        }
+        return path
+    }
+
+    /// Clockwise tile edges that face outside the set, walked into closed loops and ready to smooth.
+    private func boundaryLoops(of tiles: Set<FarmTile>) -> [[CGPoint]] {
+        struct Vertex: Hashable {
+            var x: Int
+            var y: Int
+        }
+        func quantize(_ point: CGPoint) -> Vertex {
+            Vertex(x: Int((point.x * 2).rounded()), y: Int((point.y * 2).rounded()))
+        }
+        func restore(_ vertex: Vertex) -> CGPoint {
+            CGPoint(x: CGFloat(vertex.x) / 2, y: CGFloat(vertex.y) / 2)
+        }
+        var outgoing: [Vertex: [Vertex]] = [:]
+        let sides: [(Int, Int, Int, Int)] = [
+            (0, 1, 0, -1),
+            (1, 2, 1, 0),
+            (2, 3, 0, 1),
+            (3, 0, -1, 0)
+        ]
+        for tile in tiles {
+            let corners = IsoMap.corners(tile)
+            for (startIndex, endIndex, columnStep, rowStep) in sides {
+                let neighbor = FarmTile(column: tile.column + columnStep, row: tile.row + rowStep)
+                if tiles.contains(neighbor) { continue }
+                let start = quantize(corners[startIndex])
+                let end = quantize(corners[endIndex])
+                outgoing[start, default: []].append(end)
+            }
+        }
+        var loops: [[CGPoint]] = []
+        var guardSteps = 0
+        let limit = outgoing.values.reduce(0) { $0 + $1.count } + 2
+        while let start = outgoing.first(where: { !$0.value.isEmpty })?.key {
+            var loop: [CGPoint] = []
+            var current = start
+            while guardSteps < limit {
+                guard var choices = outgoing[current], !choices.isEmpty else { break }
+                let next = choices.removeLast()
+                if choices.isEmpty {
+                    outgoing.removeValue(forKey: current)
+                } else {
+                    outgoing[current] = choices
+                }
+                loop.append(restore(current))
+                guardSteps += 1
+                if next == start {
+                    break
+                }
+                current = next
+            }
+            if loop.count >= 3 {
+                loops.append(loop)
+            }
+        }
+        return loops
+    }
+
+    private func chaikin(_ points: [CGPoint], passes: Int) -> [CGPoint] {
+        var pts = points
+        for _ in 0..<passes {
+            guard pts.count >= 3 else { return pts }
+            var next: [CGPoint] = []
+            next.reserveCapacity(pts.count * 2)
+            for index in pts.indices {
+                let current = pts[index]
+                let following = pts[(index + 1) % pts.count]
+                next.append(CGPoint(x: current.x * 0.75 + following.x * 0.25, y: current.y * 0.75 + following.y * 0.25))
+                next.append(CGPoint(x: current.x * 0.25 + following.x * 0.75, y: current.y * 0.25 + following.y * 0.75))
+            }
+            pts = next
+        }
+        return pts
+    }
+
+    /// One name per nearby cluster, then drop any label whose pill would cover one already kept.
+    private func visibleLabels(in items: [MapDrawable], canvas size: CGSize) -> [MapDrawable] {
+        guard labelOpacity > 0.04 else { return [] }
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let plants = items.compactMap { item -> (MapDrawable, Double, CGFloat)? in
+            guard case .plant(let info) = item.visual else { return nil }
+            let ground = item.pivot ?? item.point
+            let distance = hypot(ground.x - center.x, ground.y - center.y)
+            return (item, info.rating ?? 0, distance)
+        }.sorted { lhs, rhs in
+            if lhs.1 != rhs.1 { return lhs.1 > rhs.1 }
+            return lhs.2 < rhs.2
+        }
+        let cluster = IsoMap.tileWidth * camera.scale * 1.7
+        var anchors: [CGPoint] = []
+        var placed: [CGRect] = []
+        var kept: [MapDrawable] = []
+        for (item, _, _) in plants {
+            let anchor = item.pivot ?? item.point
+            if anchors.contains(where: { hypot($0.x - anchor.x, $0.y - anchor.y) < cluster }) { continue }
+            let pill = CGRect(x: item.point.x - 54, y: item.point.y - 14, width: 108, height: 28)
+            if placed.contains(where: { $0.intersects(pill) }) { continue }
+            anchors.append(anchor)
+            placed.append(pill)
+            kept.append(item)
+        }
+        return kept
     }
 
     /// One texture covers several cells, in world space, so its wrap does not sit on every cell edge.
@@ -1004,6 +1282,16 @@ private final class TerrainDrawCache {
     var key: Int?
     var fills: [(FarmItemKind, Set<FarmTile>)] = []
     var edges: [(FarmItemKind, [(edge: FarmGridEdge, owner: FarmTile)])] = []
+    var smooth: [FarmItemKind: [[CGPoint]]] = [:]
+}
+
+private final class ShoreLoopCache {
+    var landKey = ""
+    var land: [[CGPoint]] = []
+    var coastKey = ""
+    var coast: [[CGPoint]] = []
+    var waterKey = ""
+    var water: [[CGPoint]] = []
 }
 
 private struct TileBounds {

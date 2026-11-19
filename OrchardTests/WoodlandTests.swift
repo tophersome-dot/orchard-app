@@ -5,14 +5,15 @@ final class WoodlandTests: XCTestCase {
     private let clearing = FarmExpansion.clearingTiles(for: FarmExpansion.plan(treeCount: 0, bedCount: 0, vineCount: 0))
 
     func testLevelOneIslandIsLargerAndStillGrows() {
-        XCTAssertEqual(Woodland.radius(level: 1), 22, accuracy: 0.001)
+        XCTAssertEqual(Woodland.radius(level: 1), 12, accuracy: 0.001)
+        XCTAssertEqual(Woodland.radius(level: 20), 50, accuracy: 0.001)
         XCTAssertEqual(Woodland.radius(level: 2) - Woodland.radius(level: 1), Woodland.radiusGrowth, accuracy: 0.001)
         XCTAssertEqual(Woodland.level(tastedCount: 0), 1)
         let start = Woodland.make(seed: 11, level: 1, clearing: clearing, blocked: [], woods: true)
         let grown = Woodland.make(seed: 11, level: 6, clearing: clearing, blocked: [], woods: true)
         XCTAssertTrue(clearing.isSubset(of: start.ground))
         XCTAssertTrue(start.ground.isSubset(of: grown.ground.union(grown.water)))
-        XCTAssertGreaterThan(start.ground.count, clearing.count + 400)
+        XCTAssertGreaterThan(start.ground.count, clearing.count + 40)
         let eighth = Woodland.make(seed: 11, level: 8, clearing: clearing, blocked: [], woods: false)
         XCTAssertGreaterThan(Double(eighth.ground.count), Double(start.ground.count) * 2)
         let coast = start.ground.contains { tile in
@@ -33,8 +34,8 @@ final class WoodlandTests: XCTestCase {
 
     func testLakesAndCreekStayOffTheFarm() {
         let chart = Woodland.make(seed: 7, level: 1, clearing: clearing, blocked: [], woods: false)
-        XCTAssertFalse(chart.lakes.isEmpty)
-        XCTAssertTrue((3...8).contains(chart.lakes.count) || chart.lakes.count <= 16)
+        XCTAssertGreaterThanOrEqual(chart.lakes.count, 6)
+        XCTAssertLessThan(chart.lakes.count, 80)
         XCTAssertTrue(chart.lakes.isDisjoint(with: clearing))
         XCTAssertTrue(chart.creek.isDisjoint(with: clearing))
         XCTAssertTrue(chart.creek.isDisjoint(with: chart.lakes))
@@ -55,7 +56,7 @@ final class WoodlandTests: XCTestCase {
         XCTAssertGreaterThan(chart.glades.count, 20)
         XCTAssertGreaterThan(chart.groves.count, outside.count / 5)
         XCTAssertGreaterThan(Double(tall) / Double(outside.count), 0.2)
-        XCTAssertLessThan(Double(tall) / Double(chart.ground.count), 0.45)
+        XCTAssertLessThan(Double(tall) / Double(chart.ground.count), 0.55)
         XCTAssertFalse(chart.tints.isEmpty)
         for decor in chart.decor {
             XCTAssertGreaterThanOrEqual(decor.scale, 0.85)

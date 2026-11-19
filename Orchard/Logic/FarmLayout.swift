@@ -65,7 +65,7 @@ enum FarmLayout {
             let tile = FarmTile(column: item.column, row: item.row)
             byTile[tile, default: []].append(item)
         }
-        func ensureWater(_ tiles: Set<FarmTile>, kind: FarmItemKind) {
+        func ensureWater(_ tiles: Set<FarmTile>, _ kind: FarmItemKind) {
             for tile in tiles {
                 let existing = byTile[tile] ?? []
                 if existing.contains(where: { $0.record.kind == kind }) { continue }
