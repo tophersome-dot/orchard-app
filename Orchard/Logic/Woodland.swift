@@ -99,7 +99,10 @@ enum BridgeSpan: Equatable {
 enum Woodland {
     /// Starting island at collection level 1. About 40% larger than the first tight coast.
     static let levelOneRadius: Double = 22
-    static let radiusGrowth: Double = 1.25
+    /// Each collection level adds a clearly wider ring. Level 8 is more than twice level 1.
+    static let radiusGrowth: Double = 4
+    /// Bump when grove, water, or patch generation changes so existing saves rebuild.
+    static let generatorVersion = 2
 
     static func level(tastedCount: Int) -> Int {
         if let override = DebugLaunch.islandLevel {
@@ -410,19 +413,50 @@ enum Woodland {
         var glades = Set<FarmTile>()
         var dirt = Set<FarmTile>()
         for tile in ground where !protected.contains(tile) && !coast.contains(tile) {
-            let cover = field(tile.column, tile.row, seed: seed, cell: 5, salt: 4)
-            if cover > 0.62 {
+            let cover = field(tile.column, tile.row, seed: seed, cell: 8, salt: 4)
+            if cover > 0.46 {
                 groves.insert(tile)
-            } else if cover < 0.36 {
+            } else if cover < 0.30 {
                 glades.insert(tile)
             } else {
-                let worn = field(tile.column, tile.row, seed: seed, cell: 4, salt: 5)
-                if worn > 0.66 && worn < 0.82 {
+                let worn = field(tile.column, tile.row, seed: seed, cell: 7, salt: 5)
+                if worn > 0.58 && worn < 0.78 {
                     dirt.insert(tile)
                 }
             }
         }
-        return (groves, glades, dirt)
+        return (
+            solidPatches(groves, minimum: 6),
+            solidPatches(glades, minimum: 5),
+            solidPatches(dirt, minimum: 4)
+        )
+    }
+
+    /// Drops one-cell specks and tiny clumps so a patch has a soft, continuous edge.
+    private static func solidPatches(_ tiles: Set<FarmTile>, minimum: Int) -> Set<FarmTile> {
+        var tiles = tiles
+        for _ in 0..<5 {
+            let drops = tiles.filter { orthogonal($0).filter { tiles.contains($0) }.count < 2 }
+            if drops.isEmpty { break }
+            tiles.subtract(drops)
+        }
+        var seen = Set<FarmTile>()
+        var keep = Set<FarmTile>()
+        for start in tiles where !seen.contains(start) {
+            var stack = [start]
+            var component = Set<FarmTile>()
+            while let tile = stack.popLast() {
+                guard tiles.contains(tile), seen.insert(tile).inserted else { continue }
+                component.insert(tile)
+                for neighbor in orthogonal(tile) where tiles.contains(neighbor) {
+                    stack.append(neighbor)
+                }
+            }
+            if component.count >= minimum {
+                keep.formUnion(component)
+            }
+        }
+        return keep
     }
 
     private static func scenery(
@@ -438,7 +472,7 @@ enum Woodland {
         var placed = Set<FarmTile>()
         var decor: [DecorRecord] = []
         let front = clearing.map { $0.column + $0.row }.max() ?? 0
-        func add(_ name: String, _ tile: FarmTile, salt: UInt64) {
+        func add(_ name: String, _ tile: FarmTile, _ salt: UInt64) {
             guard ground.contains(tile) || lakes.contains(tile) || !ground.contains(tile) else { return }
             guard placed.insert(tile).inserted else { return }
             guard let sprite = sprite(name) else { return }
@@ -456,14 +490,15 @@ enum Woodland {
             let roll = unit(seed, tile.column, tile.row, 9)
             let cluster = field(tile.column, tile.row, seed: seed, cell: 4, salt: 8)
             if isFront(tile, front: front, clearing: clearing) {
-                if roll < 0.34 {
+                if roll < 0.55 {
                     add(understory(seed: seed, tile: tile, salt: 10), tile, 10)
                 }
                 continue
             }
-            if cluster > 0.58 && roll < 0.50 {
+            // Groves are mostly canopy. Understory fills the gaps between trunks.
+            if cluster > 0.18 && roll < 0.78 {
                 add(tallTree(seed: seed, tile: tile), tile, 9)
-            } else if roll < 0.48 {
+            } else if roll < 0.95 {
                 add(understory(seed: seed, tile: tile, salt: 10), tile, 10)
             }
         }

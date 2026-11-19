@@ -245,10 +245,12 @@ final class FarmDecor {
 final class FarmWorld {
     var seed: Int
     var builtLevel: Int
+    var generatorVersion: Int = 0
 
-    init(seed: Int, builtLevel: Int = 0) {
+    init(seed: Int, builtLevel: Int = 0, generatorVersion: Int = 0) {
         self.seed = seed
         self.builtLevel = builtLevel
+        self.generatorVersion = generatorVersion
     }
 }
 

@@ -34,6 +34,11 @@ enum FarmLayout {
             context.insert(created)
             world = created
         }
+        if world.generatorVersion != Woodland.generatorVersion {
+            try resetGeneratedWoods(in: context, world: world)
+            world.generatorVersion = Woodland.generatorVersion
+            world.builtLevel = 0
+        }
         let level = Woodland.level(tastedCount: tastedCount)
         let placements = try context.fetch(FetchDescriptor<FarmPlacement>())
         let records = placements.map(\.record)
@@ -146,13 +151,37 @@ enum FarmLayout {
                 }
             }
         }
-        if world.builtLevel != level {
+        if world.builtLevel != level || world.generatorVersion != Woodland.generatorVersion {
             world.builtLevel = level
+            world.generatorVersion = Woodland.generatorVersion
             changed = true
         }
         if changed {
             try context.save()
         }
+    }
+
+    /// Drops seeded woods so a new generator can fill the current island. Placed decor stays.
+    @MainActor
+    private static func resetGeneratedWoods(in context: ModelContext, world: FarmWorld) throws {
+        let placements = try context.fetch(FetchDescriptor<FarmPlacement>())
+        let records = placements.map(\.record)
+        let plan = FarmExpansion.plan(records: records, zones: [:], openTiles: Set(records.filter { $0.kind == .cleared }.map(\.tile)))
+        let clearing = FarmExpansion.clearingTiles(for: plan)
+        for item in placements {
+            let tile = FarmTile(column: item.column, row: item.row)
+            let kind = item.record.kind
+            let outside = !clearing.contains(tile)
+            if kind == .forest || (outside && (kind == .longgrass || kind == .dirt)) {
+                context.delete(item)
+            }
+        }
+        let decor = try context.fetch(FetchDescriptor<FarmDecor>())
+        for item in decor where item.origin == "gen" {
+            context.delete(item)
+        }
+        world.builtLevel = 0
+        try context.save()
     }
 
     @MainActor

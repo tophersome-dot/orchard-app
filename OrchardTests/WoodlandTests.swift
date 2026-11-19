@@ -13,6 +13,8 @@ final class WoodlandTests: XCTestCase {
         XCTAssertTrue(clearing.isSubset(of: start.ground))
         XCTAssertTrue(start.ground.isSubset(of: grown.ground.union(grown.water)))
         XCTAssertGreaterThan(start.ground.count, clearing.count + 400)
+        let eighth = Woodland.make(seed: 11, level: 8, clearing: clearing, blocked: [], woods: false)
+        XCTAssertGreaterThan(Double(eighth.ground.count), Double(start.ground.count) * 2)
     }
 
     func testCoastHasNoSpikesOrNotches() {
@@ -44,13 +46,12 @@ final class WoodlandTests: XCTestCase {
     func testWoodsAreGrovesNotASolidWall() {
         let blocked = Woodland.blockedTiles(records: FarmExpansion.starterRecords(), plan: FarmExpansion.plan(treeCount: 0, bedCount: 0, vineCount: 0))
         let chart = Woodland.make(seed: 19, level: 1, clearing: clearing, blocked: blocked, woods: true)
-        let outside = chart.ground.subtracting(clearing).count
+        let outside = chart.ground.subtracting(clearing)
         let tall = chart.decor.filter { Woodland.sprite($0.sprite)?.isTall == true }.count
-        let low = chart.decor.filter { Woodland.sprite($0.sprite)?.isTall == false }.count
-        XCTAssertGreaterThan(chart.glades.count, 40)
-        XCTAssertGreaterThan(chart.groves.count, 40)
-        XCTAssertLessThan(chart.decor.count, outside / 2)
-        XCTAssertLessThan(tall, low)
+        XCTAssertGreaterThan(chart.glades.count, 20)
+        XCTAssertGreaterThan(chart.groves.count, outside.count / 5)
+        XCTAssertGreaterThan(Double(tall) / Double(outside.count), 0.2)
+        XCTAssertLessThan(Double(tall) / Double(chart.ground.count), 0.45)
         XCTAssertFalse(chart.tints.isEmpty)
         for decor in chart.decor {
             XCTAssertGreaterThanOrEqual(decor.scale, 0.85)

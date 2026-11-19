@@ -126,9 +126,9 @@ struct FarmScreen: View {
     @State private var oneFingerPoint: CGPoint?
 
     init() {
-        let saved = FarmViewMemory.load()
-        _scale = State(initialValue: saved?.scale ?? 1)
-        _lastScale = State(initialValue: saved?.scale ?? 1)
+        let saved = DebugLaunch.farmZoom == nil ? FarmViewMemory.load() : nil
+        _scale = State(initialValue: saved?.scale ?? DebugLaunch.farmZoom ?? 1)
+        _lastScale = State(initialValue: saved?.scale ?? DebugLaunch.farmZoom ?? 1)
         _offset = State(initialValue: saved?.pan ?? .zero)
         _lastOffset = State(initialValue: saved?.pan ?? .zero)
         _worldCenter = State(initialValue: saved?.center ?? .zero)
@@ -201,7 +201,8 @@ struct FarmScreen: View {
     var body: some View {
         GeometryReader { geo in
             let shown = resolvedCamera(in: geo.size)
-            let namesVisible = shown.scale >= fitScale(in: geo.size) * FarmZoom.labels
+            let fit = fitScale(in: geo.size)
+            let labelOpacity = min(1, max(0, (shown.scale - fit * 0.8) / (fit * 0.35)))
             ZStack {
                 FarmColor.freshGrass
                 FarmMapView(
@@ -211,7 +212,8 @@ struct FarmScreen: View {
                     hover: hover,
                     hoverValid: hoverValid,
                     dragging: dragging,
-                    showsNames: namesVisible,
+                    showsNames: labelOpacity > 0.04,
+                    labelOpacity: labelOpacity,
                     detailed: scenery,
                     camera: shown,
                     canvasSize: geo.size,

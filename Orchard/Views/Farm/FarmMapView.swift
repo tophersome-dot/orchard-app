@@ -18,6 +18,8 @@ struct FarmMapView: View {
     var hoverValid: Bool
     var dragging: UUID?
     var showsNames: Bool
+    /// 0 hides variety names. Values in between fade them in.
+    var labelOpacity: Double = 1
     /// Sprites wait until the grass frame has committed and the images are decoded.
     var detailed: Bool
     var camera: FarmCamera
@@ -46,17 +48,18 @@ struct FarmMapView: View {
                     let drift = shoreDrift(at: timeline.date)
                     drawWater(in: &context, size: size, drift: drift)
                 }
+                .frame(width: canvasSize.width, height: canvasSize.height)
                 .allowsHitTesting(false)
             }
-            Canvas { context, size in
-                drawCliffs(in: context, size: size)
-                drawFoam(in: context, size: size)
-            }
-            .allowsHitTesting(false)
             grass
             Canvas { context, size in
                 drawTerrains(in: context, size: size)
                 drawBanks(in: context, size: size)
+            }
+            .allowsHitTesting(false)
+            Canvas { context, size in
+                drawCliffs(in: context, size: size)
+                drawFoam(in: context, size: size)
             }
             .allowsHitTesting(false)
             if detailed {
@@ -189,7 +192,7 @@ struct FarmMapView: View {
             items.append(makePost(index: index, world: post))
         }
         let bounds = visibleTileBounds(in: canvasSize, margin: 6)
-        for record in decor where bounds.contains(record.tile) {
+        for record in decor where bounds.contains(record.tile) && decorBelongsOnIsland(record.tile) {
             guard let sprite = Woodland.sprite(record.sprite) else { continue }
             let dragged = record.id == dragging ? (hover ?? record.tile) : record.tile
             items.append(makeDecor(record, sprite: sprite, tile: dragged))
@@ -472,9 +475,12 @@ struct FarmMapView: View {
     }
 
     private func makeDecor(_ record: DecorRecord, sprite: DecorSprite, tile: FarmTile) -> MapDrawable {
-        let scale = ShoreStamp.pixelScale(camera.scale) * CGFloat(record.scale)
-        let display = CGSize(width: sprite.size.width * scale, height: sprite.size.height * scale)
-        let anchor = CGPoint(x: sprite.anchor.x * scale, y: sprite.anchor.y * scale)
+        let tilesWide = max(sprite.isTall ? 1 : 0, sprite.size.width / ShoreStamp.artTile)
+        let width = tilesWide * IsoMap.tileWidth * camera.scale * CGFloat(record.scale)
+        let height = sprite.size.width > 0 ? width * sprite.size.height / sprite.size.width : width
+        let display = CGSize(width: width, height: height)
+        let anchorScale = sprite.size.width > 0 ? width / sprite.size.width : 1
+        let anchor = CGPoint(x: sprite.anchor.x * anchorScale, y: sprite.anchor.y * anchorScale)
         let ground = camera.screenPoint(IsoMap.center(tile), in: canvasSize)
         let center = CGPoint(x: ground.x - anchor.x + display.width / 2, y: ground.y - anchor.y + display.height / 2)
         return MapDrawable(
@@ -574,6 +580,7 @@ struct FarmMapView: View {
                 .padding(.vertical, 2)
                 .background(.ultraThinMaterial, in: Capsule())
                 .fixedSize()
+                .opacity(labelOpacity)
                 .position(x: item.point.x, y: (item.anchorsBase ? item.point.y : item.point.y + item.foot / 2) + 16)
         }
     }
@@ -584,21 +591,17 @@ struct FarmMapView: View {
     }
 
     private func drawWater(in context: inout GraphicsContext, size: CGSize, drift: CGSize) {
-        if let ocean = FarmSprite.image(named: FarmSprite.waterOcean) {
-            let image = context.resolve(Image(uiImage: ocean))
-            context.drawLayer { layer in
-                drawWarped(image, layer: &layer, size: size, pixelsPerCell: 128, drift: drift)
-            }
-        } else {
-            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(FarmColor.ocean))
+        let ocean = context.resolve(Image(FarmSprite.waterOcean))
+        context.drawLayer { layer in
+            drawWarped(ocean, layer: &layer, size: size, pixelsPerCell: 128, drift: drift)
         }
         let bounds = visibleTileBounds(in: size, margin: 2)
         let lakes = chart.lakes.union(chart.creek).filter { bounds.contains($0) }
-        guard !lakes.isEmpty, let lake = FarmSprite.image(named: FarmSprite.waterLake) else { return }
-        let image = context.resolve(Image(uiImage: lake))
+        guard !lakes.isEmpty else { return }
+        let lake = context.resolve(Image(FarmSprite.waterLake))
         context.drawLayer { layer in
             layer.clip(to: diamondUnion(lakes, in: size), style: FillStyle(eoFill: false))
-            drawWarped(image, layer: &layer, size: size, pixelsPerCell: 128, drift: drift)
+            drawWarped(lake, layer: &layer, size: size, pixelsPerCell: 128, drift: drift)
         }
     }
 
@@ -623,8 +626,7 @@ struct FarmMapView: View {
     }
 
     private func drawFoam(in context: GraphicsContext, size: CGSize) {
-        guard let image = FarmSprite.image(named: FarmSprite.edgeFoam) else { return }
-        let resolved = context.resolve(Image(uiImage: image))
+        let resolved = context.resolve(Image(FarmSprite.edgeFoam))
         let drop = ShoreStamp.waterDrop(camera: camera.scale)
         let bounds = visibleTileBounds(in: size, margin: 2)
         for tile in chart.ground where bounds.contains(tile) {
@@ -636,10 +638,8 @@ struct FarmMapView: View {
     }
 
     private func drawBanks(in context: GraphicsContext, size: CGSize) {
-        guard let grass = FarmSprite.image(named: FarmSprite.edgeBankGrass),
-              let sand = FarmSprite.image(named: FarmSprite.edgeBankSand) else { return }
-        let grassImage = context.resolve(Image(uiImage: grass))
-        let sandImage = context.resolve(Image(uiImage: sand))
+        let grassImage = context.resolve(Image(FarmSprite.edgeBankGrass))
+        let sandImage = context.resolve(Image(FarmSprite.edgeBankSand))
         let bounds = visibleTileBounds(in: size, margin: 2)
         let water = chart.water
         for tile in chart.ground where bounds.contains(tile) {
@@ -652,13 +652,17 @@ struct FarmMapView: View {
     }
 
     private func drawStamp(_ stamp: DecorSprite, at world: CGPoint, in context: GraphicsContext, size: CGSize) {
-        guard let image = FarmSprite.image(named: stamp.name) else { return }
         let scale = ShoreStamp.pixelScale(camera.scale)
         let display = CGSize(width: stamp.size.width * scale, height: stamp.size.height * scale)
         let anchor = CGPoint(x: stamp.anchor.x * scale, y: stamp.anchor.y * scale)
         let screen = camera.screenPoint(world, in: size)
         let rect = CGRect(x: screen.x - anchor.x, y: screen.y - anchor.y, width: display.width, height: display.height)
-        context.draw(context.resolve(Image(uiImage: image)), in: rect)
+        context.draw(context.resolve(Image(stamp.name)), in: rect)
+    }
+
+    private func decorBelongsOnIsland(_ tile: FarmTile) -> Bool {
+        if chart.ground.contains(tile) || chart.water.contains(tile) { return true }
+        return Woodland.orthogonal(tile).contains { chart.ground.contains($0) }
     }
 
     private func isOcean(_ tile: FarmTile) -> Bool {
@@ -689,9 +693,16 @@ struct FarmMapView: View {
 
     private func drawTerrains(in context: GraphicsContext, size: CGSize) {
         let order: [FarmItemKind] = [.forest, .longgrass, .dirt, .sand, .path, .tilled]
+        let onIsland = chart.ground.union(chart.water)
         var fills: [(FarmItemKind, Set<FarmTile>)] = []
         for kind in order {
-            let tiles = Set(terrain.compactMap { tile, painted in painted == kind ? tile : nil })
+            let tiles = Set(terrain.compactMap { tile, painted in
+                guard painted == kind else { return nil }
+                if kind == .forest || kind == .longgrass || kind == .dirt, !onIsland.contains(tile) {
+                    return nil
+                }
+                return tile
+            })
             if !tiles.isEmpty {
                 fills.append((kind, tiles))
             }
@@ -709,8 +720,17 @@ struct FarmMapView: View {
         for (kind, tiles) in fills {
             guard let name = FarmSprite.terrainEdge(kind) else { continue }
             let resolved = context.resolve(Image(name))
+            let feather: CGFloat? = (kind == .forest || kind == .longgrass || kind == .dirt) ? 0.22 : nil
             for boundary in FarmSurface.boundaryEdges(of: tiles) {
-                drawEdgeStrip(resolved, edge: boundary.edge, owner: boundary.outwardFrom, kind: kind, in: context, size: size)
+                drawEdgeStrip(
+                    resolved,
+                    edge: boundary.edge,
+                    owner: boundary.outwardFrom,
+                    kind: kind,
+                    in: context,
+                    size: size,
+                    fraction: feather
+                )
             }
         }
     }
