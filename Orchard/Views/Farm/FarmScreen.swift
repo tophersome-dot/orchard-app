@@ -267,6 +267,7 @@ struct FarmScreen: View {
             }
             .onAppear {
                 mapSize = geo.size
+                OrchardTiming.log("launch args \(ProcessInfo.processInfo.arguments.joined(separator: " | ")) level \(String(describing: DebugLaunch.islandLevel)) zoom \(String(describing: DebugLaunch.farmZoom))")
                 updateChart()
                 if DebugLaunch.farmZoom != nil {
                     applyFarmZoom(in: geo.size)

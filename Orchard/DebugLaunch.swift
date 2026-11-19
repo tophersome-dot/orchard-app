@@ -31,11 +31,7 @@ enum DebugLaunch {
     /// Overrides the collection level that sizes the island. Example: `-islandLevel 1`
     static var islandLevel: Int? {
         #if DEBUG
-        let arguments = ProcessInfo.processInfo.arguments
-        guard let index = arguments.firstIndex(of: "-islandLevel"), index + 1 < arguments.count else {
-            return nil
-        }
-        guard let value = Int(arguments[index + 1]) else { return nil }
+        guard let raw = flagValue("islandLevel"), let value = Int(raw), value > 0 else { return nil }
         return value
         #else
         return nil
@@ -54,15 +50,34 @@ enum DebugLaunch {
     /// Example: `-farmZoom 0.45`
     static var farmZoom: CGFloat? {
         #if DEBUG
-        let arguments = ProcessInfo.processInfo.arguments
-        guard let index = arguments.firstIndex(of: "-farmZoom"), index + 1 < arguments.count else {
-            return nil
-        }
-        guard let value = Double(arguments[index + 1]), value > 0 else { return nil }
+        guard let raw = flagValue("farmZoom"), let value = Double(raw), value > 0 else { return nil }
         return CGFloat(value)
         #else
         return nil
         #endif
+    }
+
+    /// `-name value` from argv, `-name=value`, or the matching UserDefaults entry.
+    /// iOS copies launch arguments of that form into `UserDefaults` even when a host drops them from `arguments`.
+    static func flagValue(_ name: String) -> String? {
+        let args = ProcessInfo.processInfo.arguments
+        let dashed = name.hasPrefix("-") ? name : "-" + name
+        if let index = args.firstIndex(of: dashed), index + 1 < args.count {
+            return args[index + 1]
+        }
+        let prefix = dashed + "="
+        if let inline = args.first(where: { $0.hasPrefix(prefix) }) {
+            return String(inline.dropFirst(prefix.count))
+        }
+        let key = String(dashed.dropFirst())
+        if let text = UserDefaults.standard.string(forKey: key), !text.isEmpty {
+            return text
+        }
+        if UserDefaults.standard.object(forKey: key) != nil {
+            let number = UserDefaults.standard.double(forKey: key)
+            if number != 0 { return String(number) }
+        }
+        return nil
     }
 
     static var initialTab: AppTab {

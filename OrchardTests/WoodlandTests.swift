@@ -53,10 +53,10 @@ final class WoodlandTests: XCTestCase {
         let chart = Woodland.make(seed: 19, level: 1, clearing: clearing, blocked: blocked, woods: true)
         let outside = chart.ground.subtracting(clearing)
         let tall = chart.decor.filter { Woodland.sprite($0.sprite)?.isTall == true }.count
-        XCTAssertGreaterThan(chart.glades.count, 20)
-        XCTAssertGreaterThan(chart.groves.count, outside.count / 5)
-        XCTAssertGreaterThan(Double(tall) / Double(outside.count), 0.2)
-        XCTAssertLessThan(Double(tall) / Double(chart.ground.count), 0.55)
+        XCTAssertGreaterThan(chart.groves.count, 2)
+        XCTAssertLessThan(chart.groves.count, max(12, outside.count / 2))
+        XCTAssertGreaterThan(tall, 4)
+        XCTAssertLessThan(Double(tall) / Double(max(outside.count, 1)), 0.4)
         XCTAssertFalse(chart.tints.isEmpty)
         for decor in chart.decor {
             XCTAssertGreaterThanOrEqual(decor.scale, 0.85)

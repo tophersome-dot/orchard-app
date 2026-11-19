@@ -495,7 +495,8 @@ struct FarmMapView: View {
             flipped: record.flipped,
             opacity: 1,
             pivot: ground,
-            tall: sprite.isTall
+            tall: sprite.isTall,
+            tile: tile
         )
     }
 
@@ -526,12 +527,20 @@ struct FarmMapView: View {
     }
 
     private func fadeTreesCoveringTheFarm(_ items: inout [MapDrawable]) {
-        let farm = items.filter { !$0.tall }.map { spriteRect($0) }
-        for index in items.indices where items[index].tall {
-            let rect = spriteRect(items[index])
-            if farm.contains(where: { $0.intersects(rect) }) {
-                items[index].opacity = 0.35
+        let farm = records.compactMap { record -> FarmTile? in
+            switch record.kind {
+            case .plant, .house, .tractor, .fence: record.tile
+            default: nil
             }
+        }
+        for index in items.indices where items[index].tall {
+            guard let tree = items[index].tile else { continue }
+            let inFront = farm.contains { plot in
+                let span = max(abs(tree.column - plot.column), abs(tree.row - plot.row))
+                let south = tree.column + tree.row > plot.column + plot.row
+                return span <= 1 && south
+            }
+            items[index].opacity = inFront ? 0.35 : 1
         }
     }
 
@@ -620,7 +629,7 @@ struct FarmMapView: View {
     private func smoothedWaterLoops() -> [[CGPoint]] {
         let key = "water-\(chart.lakes.count)-\(chart.creek.count)"
         if shoreCache.waterKey == key { return shoreCache.water }
-        let loops = boundaryLoops(of: chart.lakes.union(chart.creek)).map { chaikin($0, passes: 3) }
+        let loops = boundaryLoops(of: chart.lakes.union(chart.creek)).map { roundOutline($0) }
         shoreCache.waterKey = key
         shoreCache.water = loops
         return loops
@@ -824,7 +833,7 @@ struct FarmMapView: View {
     private func smoothedLandLoops() -> [[CGPoint]] {
         let key = "land-\(chart.ground.count)-\(chart.lakes.count)-\(chart.creek.count)"
         if shoreCache.landKey == key { return shoreCache.land }
-        let loops = boundaryLoops(of: chart.ground).map { chaikin($0, passes: 3) }
+        let loops = boundaryLoops(of: chart.ground).map { roundOutline($0) }
         shoreCache.landKey = key
         shoreCache.land = loops
         return loops
@@ -834,7 +843,7 @@ struct FarmMapView: View {
         let key = "coast-\(chart.ground.count)-\(chart.lakes.count)-\(chart.creek.count)"
         if shoreCache.coastKey == key { return shoreCache.coast }
         let mass = chart.ground.union(chart.water)
-        let loops = boundaryLoops(of: mass).map { chaikin($0, passes: 3) }
+        let loops = boundaryLoops(of: mass).map { roundOutline($0) }
         shoreCache.coastKey = key
         shoreCache.coast = loops
         return loops
@@ -922,7 +931,7 @@ struct FarmMapView: View {
             guard !tiles.isEmpty else { continue }
             fills.append((kind, tiles))
             if natural.contains(kind) {
-                smooth[kind] = boundaryLoops(of: tiles).map { chaikin($0, passes: 3) }
+                smooth[kind] = boundaryLoops(of: tiles).map { roundOutline($0) }
             } else {
                 let boundary = FarmSurface.boundaryEdges(of: tiles).map { (edge: $0.edge, owner: $0.outwardFrom) }
                 edges.append((kind, boundary))
@@ -1020,8 +1029,16 @@ struct FarmMapView: View {
         return loops
     }
 
-    private func chaikin(_ points: [CGPoint], passes: Int) -> [CGPoint] {
+    /// Cuts each corner by about half a tile, then eases the chamfer into a curve.
+    private func roundOutline(_ points: [CGPoint]) -> [CGPoint] {
+        let chamfered = chaikin(points, passes: 2, weight: 0.5)
+        return chaikin(chamfered, passes: 1, weight: 0.25)
+    }
+
+    private func chaikin(_ points: [CGPoint], passes: Int, weight: CGFloat = 0.25) -> [CGPoint] {
         var pts = points
+        let keep = min(max(weight, 0.05), 0.5)
+        let take = 1 - keep
         for _ in 0..<passes {
             guard pts.count >= 3 else { return pts }
             var next: [CGPoint] = []
@@ -1029,8 +1046,8 @@ struct FarmMapView: View {
             for index in pts.indices {
                 let current = pts[index]
                 let following = pts[(index + 1) % pts.count]
-                next.append(CGPoint(x: current.x * 0.75 + following.x * 0.25, y: current.y * 0.75 + following.y * 0.25))
-                next.append(CGPoint(x: current.x * 0.25 + following.x * 0.75, y: current.y * 0.25 + following.y * 0.75))
+                next.append(CGPoint(x: current.x * take + following.x * keep, y: current.y * take + following.y * keep))
+                next.append(CGPoint(x: current.x * keep + following.x * take, y: current.y * keep + following.y * take))
             }
             pts = next
         }
@@ -1234,6 +1251,7 @@ private struct MapDrawable: Identifiable {
     var opacity: Double = 1
     var pivot: CGPoint? = nil
     var tall: Bool = false
+    var tile: FarmTile? = nil
 }
 
 private enum MapVisual {
