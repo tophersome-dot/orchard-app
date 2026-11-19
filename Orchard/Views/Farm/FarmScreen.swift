@@ -197,7 +197,7 @@ struct FarmScreen: View {
     }
 
     private var decorRecords: [DecorRecord] {
-        DebugLaunch.noWoods ? [] : decorItems.map(\.record)
+        launch.noWoods ? [] : decorItems.map(\.record)
     }
 
     private var openTiles: [FarmTile] {
@@ -217,12 +217,13 @@ struct FarmScreen: View {
     }
 
     private func resolvedCamera(in viewSize: CGSize) -> FarmCamera {
-        if honorLaunchZoom, let zoom = DebugLaunch.farmZoom {
-            var shown = framed ? camera : fittedCamera(in: viewSize)
-            shown.scale = zoom
+        let base = framed ? camera : fittedCamera(in: viewSize)
+        if !userMoved, let zoom = launch.farmZoom, zoom > 0 {
+            var shown = base
+            shown.scale = CGFloat(zoom)
             return shown
         }
-        return framed ? camera : fittedCamera(in: viewSize)
+        return base
     }
 
     var body: some View {
@@ -256,7 +257,7 @@ struct FarmScreen: View {
                         reduceMotion: UIAccessibility.isReduceMotionEnabled
                     ),
                     ghost: brushGhost,
-                    showsGrid: editing
+                    showsGrid: showsEditing
                 )
                 .offset(x: shakeOffset)
                 FarmJuiceOverlay(
@@ -270,7 +271,7 @@ struct FarmScreen: View {
                     reduceMotion: UIAccessibility.isReduceMotionEnabled
                 )
                 MapGestureOverlay(
-                    brush: tool.isBrush && editing,
+                    brush: (showsClearTool || isPaintTool) && showsEditing,
                     onPinch: { magnification, point, state in
                         handlePinch(magnification, at: point, state: state, in: geo.size)
                     },
@@ -294,7 +295,8 @@ struct FarmScreen: View {
             }
             .onAppear {
                 mapSize = geo.size
-                OrchardTiming.log("launch args \(ProcessInfo.processInfo.arguments.joined(separator: " | ")) level \(String(describing: DebugLaunch.islandLevel)) zoom \(String(describing: DebugLaunch.farmZoom))")
+                launch.refresh()
+                OrchardTiming.log("launch args \(ProcessInfo.processInfo.arguments.joined(separator: " | ")) ring \(launch.resolvedLevel(tastedCount: tastedCount)) edit \(launch.editSelection) zoom \(String(describing: launch.farmZoom))")
                 updateChart()
                 if DebugLaunch.farmZoom != nil {
                     applyFarmZoom(in: geo.size)
@@ -312,17 +314,18 @@ struct FarmScreen: View {
             .onChange(of: plantKey) { _, key in
                 noteNewPlants(key)
             }
+            .task { trackLaunchFlags() }
         }
         .coordinateSpace(name: "farm")
         .overlay(alignment: .top) { topBar }
         .overlay(alignment: .bottom) {
-            if let step = activeHint, step != .edit {
+            if let step = activeHint, step != .edit, !showsEditing {
                 FarmHintChip(step: step, onDismiss: advanceHint)
                     .padding(.bottom, step == .pinch ? 12 : 64)
             }
         }
         .overlay(alignment: .topTrailing) {
-            if activeHint == .edit {
+            if activeHint == .edit, !showsEditing {
                 FarmHintChip(step: .edit, onDismiss: advanceHint)
                     .padding(.trailing, 16)
                     .padding(.top, 62)
@@ -335,7 +338,7 @@ struct FarmScreen: View {
         }
         .overlay(alignment: .bottom) { bottomChrome }
         .overlay(alignment: .bottomTrailing) {
-            if !storageOpen { zoomButtons }
+            if !showsStorage { zoomButtons }
         }
         .overlay(alignment: .center) { selectionChrome }
         .sheet(item: $selected) { link in
@@ -385,7 +388,7 @@ struct FarmScreen: View {
     private var displayTerrain: [FarmTile: FarmItemKind] {
         var map: [FarmTile: FarmItemKind] = [:]
         for record in displayRecords where record.kind.isTerrain {
-            if DebugLaunch.noWoods && record.kind == .forest { continue }
+            if launch.noWoods && record.kind == .forest { continue }
             if chart.water.contains(record.tile) && record.kind != .lake && record.kind != .creek { continue }
             map[record.tile] = record.kind
         }
@@ -436,12 +439,25 @@ struct FarmScreen: View {
         }
     }
 
+    /// Same object the chart log prints. Reading it here is what refreshes the ring.
+    private var launch: LaunchOverrides { LaunchOverrides.shared }
+
     /// The island level. `-islandLevel` wins over the collection count, including in the ring.
     private var islandLevel: Int {
-        if let override = DebugLaunch.islandLevel {
-            return override
-        }
-        return Woodland.level(tastedCount: tastedCount)
+        launch.resolvedLevel(tastedCount: tastedCount)
+    }
+
+    /// Edit chrome follows the shared flags even if this view's `@State` was created earlier.
+    private var showsEditing: Bool {
+        editing || launch.editSelection || launch.showStorage || launch.axeClear || launch.demoTerrain
+    }
+
+    private var showsStorage: Bool {
+        storageOpen || launch.showStorage
+    }
+
+    private var showsClearTool: Bool {
+        tool == .clear || (launch.axeClear && tool == .move)
     }
 
     private var topBar: some View {
@@ -453,7 +469,7 @@ struct FarmScreen: View {
             progress: radius / Woodland.radiusCap,
             detail: "Level \(islandLevel) · \(tastedCount) collected · \(next)",
             soundOn: soundOn,
-            editing: editing,
+            editing: showsEditing,
             onSound: {
                 soundOn.toggle()
                 FarmAudio.enabled = soundOn
@@ -467,7 +483,7 @@ struct FarmScreen: View {
 
     private var bottomChrome: some View {
         VStack(spacing: 8) {
-            if storageOpen {
+            if showsStorage {
                 FarmStorageTray(
                     stacks: storageStacks,
                     onClose: { storageOpen = false },
@@ -489,10 +505,10 @@ struct FarmScreen: View {
                 )
                 .padding(.horizontal, 12)
             }
-            if editing {
-                if isPaintTool {
+            if showsEditing {
+                if isPaintTool && !showsClearTool {
                     paletteRow
-                } else if tool == .clear {
+                } else if showsClearTool {
                     Text("Tap trees or rocks to clear")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(OrchardColor.ink)
@@ -501,10 +517,10 @@ struct FarmScreen: View {
                         .background(.ultraThinMaterial, in: Capsule())
                 }
                 FarmEditToolbar(
-                    moveOn: tool == .move,
-                    paintOn: isPaintTool,
-                    axeOn: tool == .clear,
-                    storageOn: storageOpen,
+                    moveOn: tool == .move && !showsClearTool,
+                    paintOn: isPaintTool && !showsClearTool,
+                    axeOn: showsClearTool,
+                    storageOn: showsStorage,
                     canUndo: !undo.isEmpty,
                     onMove: { selectTool(.move) },
                     onPaint: { selectTool(.paint(.path)) },
@@ -521,7 +537,7 @@ struct FarmScreen: View {
             }
         }
         .padding(.bottom, 8)
-        .animation(UIAccessibility.isReduceMotionEnabled ? nil : .spring(response: 0.35, dampingFraction: 0.86), value: editing)
+        .animation(UIAccessibility.isReduceMotionEnabled ? nil : .spring(response: 0.35, dampingFraction: 0.86), value: showsEditing)
     }
 
     private var isPaintTool: Bool {
@@ -574,7 +590,7 @@ struct FarmScreen: View {
 
     @ViewBuilder
     private var selectionChrome: some View {
-        if let tile = selectionTile, editing || armedMove {
+        if let tile = selectionTile, showsEditing || armedMove {
             let point = resolvedCamera(in: mapSize).screenPoint(IsoMap.center(tile), in: mapSize)
             FarmSelectionButtons(
                 canFlip: selectedDecor != nil,
@@ -595,7 +611,7 @@ struct FarmScreen: View {
     }
 
     private var activeHint: FarmHintStep? {
-        guard !editing else { return nil }
+        guard !showsEditing else { return nil }
         let index = DebugLaunch.showHints ? forcedHint : UserDefaults.standard.integer(forKey: "orchard.hint.step")
         return FarmHintStep(rawValue: index)
     }
@@ -689,7 +705,7 @@ struct FarmScreen: View {
     private func handleOnePan(start: CGPoint, current: CGPoint, translation: CGSize, state: UIGestureRecognizer.State, in viewSize: CGSize) {
         let travel = hypot(translation.width, translation.height)
         if gesture != .moveItem, state == .began || gesture == .undecided {
-            if editing, tool.isBrush {
+            if showsEditing, showsClearTool || isPaintTool {
                 gesture = .place
             } else if let found = pickedUp(at: start, in: viewSize) {
                 beginMove(found)
@@ -732,8 +748,8 @@ struct FarmScreen: View {
     }
 
     private func pickedUp(at start: CGPoint, in viewSize: CGSize) -> FarmHit? {
-        let editingMove = editing && tool == .move
-        let direct = !editing && gesture == .undecided && false
+        let editingMove = showsEditing && tool == .move && !showsClearTool
+        let direct = !showsEditing && gesture == .undecided && false
         guard editingMove || direct else { return nil }
         return hit(at: start, in: viewSize)
     }
@@ -832,7 +848,7 @@ struct FarmScreen: View {
             let painted = !paintStroke.isEmpty || !decorStroke.isEmpty || !clearTiles.isEmpty
             if case .decor = tool {
                 commitDecorStroke()
-            } else if tool == .clear {
+            } else if showsClearTool {
                 commitClear()
             } else {
                 commitPaint()
@@ -968,7 +984,7 @@ struct FarmScreen: View {
             zoomButton("minus") { nudgeZoom(1 / 1.25) }
         }
         .padding(.trailing, 12)
-        .padding(.bottom, editing ? 168 : 12)
+        .padding(.bottom, showsEditing ? 168 : 12)
     }
 
     private func zoomButton(_ symbol: String, action: @escaping () -> Void) -> some View {
@@ -993,16 +1009,35 @@ struct FarmScreen: View {
         }
     }
 
+    private func trackLaunchFlags() async {
+        var seen = ""
+        for _ in 0..<40 {
+            launch.refresh()
+            let stamp = "\(launch.islandLevel ?? -1)|\(launch.editSelection)|\(launch.showStorage)|\(launch.axeClear)|\(launch.farmZoom ?? -1)"
+            if stamp != seen {
+                seen = stamp
+                applyDebugChrome()
+                updateChart()
+                if launch.farmZoom != nil, !userMoved {
+                    honorLaunchZoom = true
+                    applyFarmZoom(in: mapSize)
+                }
+            }
+            try? await Task.sleep(for: .milliseconds(150))
+        }
+    }
+
     private func updateChart() {
-        let level = Woodland.level(tastedCount: tastedCount)
+        launch.refresh()
+        let level = launch.resolvedLevel(tastedCount: tastedCount)
         let seed = worlds.first?.seed ?? 1
         let clearing = FarmExpansion.clearingTiles(for: yardPlan)
         let blocked = Woodland.blockedTiles(records: records, plan: yardPlan)
-        let woods = !DebugLaunch.noWoods
+        let woods = !launch.noWoods
         let key = IslandChartCache.cacheKey(seed: seed, level: level, clearing: clearing, blocked: blocked, woods: woods)
         if key == chartKey, !chart.ground.isEmpty { return }
         chartKey = key
-        OrchardTiming.log("chart request level \(level) radius \(String(format: "%.1f", Woodland.radius(level: level, around: clearing))) seed \(seed) override \(String(describing: DebugLaunch.islandLevel))")
+        OrchardTiming.log("chart request level \(level) radius \(String(format: "%.1f", Woodland.radius(level: level, around: clearing))) seed \(seed) ring \(launch.resolvedLevel(tastedCount: tastedCount))")
         Task {
             let next = await IslandChartCache.chart(key: key) {
                 Woodland.make(
@@ -1024,8 +1059,9 @@ struct FarmScreen: View {
             playedLevel = level
             chart = next
             sawChart = true
-            let shownScale = DebugLaunch.farmZoom ?? fittedCamera(in: mapSize).scale
-            OrchardTiming.log(String(format: "chart apply level %d radius %.1f ground %d shown %.3f ring %d", level, Woodland.radius(level: level, around: clearing), next.ground.count, Double(shownScale), islandLevel))
+            let shownScale = resolvedCamera(in: mapSize).scale
+            let ring = launch.resolvedLevel(tastedCount: tastedCount)
+            OrchardTiming.log(String(format: "chart apply level %d radius %.1f ground %d shown %.3f ring %d", level, Woodland.radius(level: level, around: clearing), next.ground.count, Double(shownScale), ring))
             if honorLaunchZoom, DebugLaunch.farmZoom != nil {
                 applyFarmZoom(in: mapSize)
             } else if !userMoved {
@@ -1033,7 +1069,7 @@ struct FarmScreen: View {
                 frameHouse(in: mapSize)
             }
             applyDebugChrome()
-            if allowGrowthBanner, let previousLevel, level > previousLevel, DebugLaunch.islandLevel == nil {
+            if allowGrowthBanner, let previousLevel, level > previousLevel, launch.islandLevel == nil {
                 celebrateGrowth()
             }
         }
@@ -1041,15 +1077,17 @@ struct FarmScreen: View {
 
     /// `-farmZoom` wins over the saved camera and the fit-to-farm scale.
     private func applyFarmZoom(in viewSize: CGSize) {
-        guard let zoom = DebugLaunch.farmZoom, viewSize.width > 1, viewSize.height > 1 else { return }
+        launch.refresh()
+        guard let zoom = launch.farmZoom, zoom > 0, viewSize.width > 1, viewSize.height > 1 else { return }
         let focus = cameraFitting(farmWorldPoints(), in: viewSize, margin: 0, fill: 0.90)
-        scale = zoom
-        lastScale = zoom
+        scale = CGFloat(zoom)
+        lastScale = CGFloat(zoom)
         worldCenter = focus.center
         offset = .zero
         lastOffset = .zero
         framed = true
-        OrchardTiming.log(String(format: "farmZoom %.3f shown %.3f", Double(zoom), Double(zoom)))
+        let shown = resolvedCamera(in: viewSize).scale
+        OrchardTiming.log(String(format: "farmZoom %.3f shown %.3f ring %d", zoom, Double(shown), launch.resolvedLevel(tastedCount: tastedCount)))
     }
 
     private func tile(at location: CGPoint, in viewSize: CGSize) -> FarmTile {
@@ -1172,7 +1210,7 @@ struct FarmScreen: View {
                     paintStroke[painted] = kind
                 } else if case .decor(let name) = tool, chart.ground.contains(painted), !chart.water.contains(painted) {
                     decorStroke[painted] = name
-                } else if tool == .clear, canClear(painted) {
+                } else if showsClearTool, canClear(painted) {
                     clearTiles.insert(painted)
                 }
                 last = painted
@@ -1337,7 +1375,7 @@ struct FarmScreen: View {
         if let armedStorage, let item = storedItems.first(where: { $0.id == armedStorage }), let tile = brushTile ?? hover {
             return FarmGhost(tile: tile, sprite: item.sprite, valid: storageValid(armedStorage, on: tile))
         }
-        guard editing, tool.isBrush, let brushTile else { return nil }
+        guard showsEditing, isPaintTool || showsClearTool, let brushTile else { return nil }
         let sprite: String?
         if case .decor(let name) = tool { sprite = name } else { sprite = nil }
         let valid: Bool
@@ -1415,7 +1453,7 @@ struct FarmScreen: View {
             placeStored(armedStorage, on: tile(at: point, in: viewSize))
             return
         }
-        if editing {
+        if showsEditing {
             if let found = hit(at: point, in: viewSize) {
                 beginMove(found)
                 dragging = nil
@@ -1666,11 +1704,12 @@ struct FarmScreen: View {
     }
 
     private func applyDebugChrome() {
-        OrchardTiming.log("debug chrome edit \(DebugLaunch.editSelection) storage \(DebugLaunch.showStorage) axe \(DebugLaunch.axeClear) hints \(DebugLaunch.showHints)")
-        if DebugLaunch.editSelection || DebugLaunch.axeClear || DebugLaunch.showStorage {
+        launch.refresh()
+        OrchardTiming.log("debug chrome edit \(launch.editSelection) storage \(launch.showStorage) axe \(launch.axeClear) hints \(launch.showHints) ring \(launch.resolvedLevel(tastedCount: tastedCount))")
+        if launch.editSelection || launch.axeClear || launch.showStorage || launch.demoTerrain {
             editing = true
         }
-        if DebugLaunch.axeClear {
+        if launch.axeClear {
             tool = .clear
             if falling.isEmpty, let tree = decorRecords.first(where: { Woodland.sprite($0.sprite)?.isTall == true }) {
                 falling.append(FallingTree(tile: tree.tile, sprite: tree.sprite, born: Date().addingTimeInterval(-0.32), held: true))
@@ -1678,11 +1717,11 @@ struct FarmScreen: View {
                 sparks.append(FarmSpark(kind: .floater, tile: tree.tile, born: Date().addingTimeInterval(-0.2), text: "+1 cleared"))
             }
         }
-        if DebugLaunch.showStorage {
+        if launch.showStorage {
             storageOpen = true
             seedDebugStorageIfNeeded()
         }
-        if DebugLaunch.editSelection, selectedRecord == nil, selectedDecor == nil {
+        if launch.editSelection, selectedRecord == nil, selectedDecor == nil {
             if let plant = records.first(where: { $0.kind == .plant }) {
                 selectedRecord = plant.id
             } else if let decor = decorRecords.first {

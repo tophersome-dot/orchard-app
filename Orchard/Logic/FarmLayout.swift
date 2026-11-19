@@ -40,13 +40,14 @@ enum FarmLayout {
             world.generatorVersion = Woodland.generatorVersion
             world.builtLevel = 0
         }
-        let level = Woodland.level(tastedCount: tastedCount)
+        LaunchOverrides.shared.refresh()
+        let level = LaunchOverrides.shared.resolvedLevel(tastedCount: tastedCount)
         let placements = try context.fetch(FetchDescriptor<FarmPlacement>())
         let records = placements.map(\.record)
         let plan = FarmExpansion.plan(records: records, zones: zones, openTiles: Set(records.filter { $0.kind == .cleared }.map(\.tile)))
         let clearing = FarmExpansion.clearingTiles(for: plan)
         let blocked = Woodland.blockedTiles(records: records, plan: plan)
-        let woodsOn = !DebugLaunch.noWoods
+        let woodsOn = !LaunchOverrides.shared.noWoods
         let seedValue = world.seed
         let key = IslandChartCache.cacheKey(seed: seedValue, level: level, clearing: clearing, blocked: blocked, woods: woodsOn)
         let chart = await IslandChartCache.chart(key: key) {

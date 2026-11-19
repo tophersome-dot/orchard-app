@@ -130,19 +130,16 @@ enum BridgeSpan: Equatable {
 enum Woodland {
     /// Smallest level-1 radius when the clearing itself is tiny.
     static let levelOneFloor: Double = 9
-    /// Woods beyond the edge of the clearing at level 1.
-    static let levelOneRing: Double = 4
+    /// Woods beyond the edge of the clearing at level 1. Short enough that the farm view shows the sea.
+    static let levelOneRing: Double = 3
     /// Each collection level adds two tiles of radius, until the island is about 50 tiles across.
     static let radiusGrowth: Double = 2
     static let radiusCap: Double = 50
     /// Bump when grove, water, or patch generation changes so existing saves rebuild.
-    static let generatorVersion = 7
+    static let generatorVersion = 8
 
     static func level(tastedCount: Int) -> Int {
-        if let override = DebugLaunch.islandLevel {
-            return max(1, override)
-        }
-        return max(1, tastedCount + 1)
+        LaunchOverrides.shared.resolvedLevel(tastedCount: tastedCount)
     }
 
     /// Level 1 is the clearing plus about a 4-tile ring of woods, and never under 9.
@@ -331,7 +328,7 @@ enum Woodland {
                 let distance = (dx * dx + dy * dy).squareRoot()
                 let broad = field(column, row, seed: seed, cell: 7, salt: 1)
                 let detail = field(column, row, seed: seed, cell: 3, salt: 2)
-                let wobble = (broad - 0.5) * 2.4 + (detail - 0.5) * 0.8
+                let wobble = (broad - 0.5) * 1.0 + (detail - 0.5) * 0.35
                 if distance <= reachRadius + wobble {
                     land.insert(tile)
                 }

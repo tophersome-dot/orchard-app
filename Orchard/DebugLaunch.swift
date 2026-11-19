@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 enum OrchardTiming {
     static let boot = CFAbsoluteTimeGetCurrent()
@@ -149,5 +150,50 @@ enum DebugLaunch {
         #else
         return .farm
         #endif
+    }
+}
+
+/// One copy of the launch flags, shared by every `FarmScreen`.
+/// The ring, the toolbar and the camera read this. The logs print this same object.
+@Observable
+final class LaunchOverrides {
+    static let shared = LaunchOverrides()
+
+    private(set) var islandLevel: Int?
+    private(set) var farmZoom: Double?
+    private(set) var editSelection = false
+    private(set) var showStorage = false
+    private(set) var axeClear = false
+    private(set) var showHints = false
+    private(set) var demoTerrain = false
+    private(set) var noWoods = false
+
+    /// Level drawn in the ring and passed to the island generator.
+    func resolvedLevel(tastedCount: Int) -> Int {
+        if let islandLevel { return islandLevel }
+        return max(1, tastedCount + 1)
+    }
+
+    /// Pulls the current process arguments. Safe to call more than once.
+    func refresh() {
+        let level = DebugLaunch.islandLevel
+        let zoom = DebugLaunch.farmZoom.map { Double($0) }
+        let edit = DebugLaunch.editSelection
+        let storage = DebugLaunch.showStorage
+        let axe = DebugLaunch.axeClear
+        let hints = DebugLaunch.showHints
+        let demo = DebugLaunch.demoTerrain
+        let woods = DebugLaunch.noWoods
+        guard level != islandLevel || zoom != farmZoom || edit != editSelection || storage != showStorage
+                || axe != axeClear || hints != showHints || demo != demoTerrain || woods != noWoods else { return }
+        islandLevel = level
+        farmZoom = zoom
+        editSelection = edit
+        showStorage = storage
+        axeClear = axe
+        showHints = hints
+        demoTerrain = demo
+        noWoods = woods
+        OrchardTiming.log("launch model level \(String(describing: level)) edit \(edit) storage \(storage) axe \(axe) zoom \(String(describing: zoom))")
     }
 }
