@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-struct DecorRecord: Equatable, Identifiable {
+struct DecorRecord: Equatable, Identifiable, Sendable {
     var id: UUID
     var sprite: String
     var tile: FarmTile
@@ -30,14 +30,14 @@ struct DecorSprite: Equatable, Identifiable {
     }
 }
 
-struct GrassTint: Equatable {
+struct GrassTint: Equatable, Sendable {
     var tile: FarmTile
     var radius: CGFloat
     var light: Bool
 }
 
 /// The generated island. Ground is dry land, including the farm clearing.
-struct IslandChart: Equatable {
+struct IslandChart: Equatable, Sendable {
     var ground: Set<FarmTile>
     var lakes: Set<FarmTile>
     var creek: Set<FarmTile>
@@ -64,6 +64,37 @@ struct IslandChart: Equatable {
         var chart = IslandChart.empty
         chart.ground = FarmExpansion.clearingTiles(for: FarmExpansion.plan(treeCount: 0, bedCount: 0, vineCount: 0))
         return chart
+    }
+}
+
+/// One generated island, shared by the map and the save so the expensive build runs once per seed and level.
+enum IslandChartCache {
+    private static let lock = NSLock()
+    private static var storedKey = ""
+    private static var storedChart = IslandChart.empty
+
+    static func cacheKey(seed: Int, level: Int, clearing: Set<FarmTile>, blocked: Set<FarmTile>, woods: Bool) -> String {
+        let columns = clearing.map(\.column)
+        let rows = clearing.map(\.row)
+        return "\(seed)|\(level)|\(columns.min() ?? 0)|\(columns.max() ?? 0)|\(rows.min() ?? 0)|\(rows.max() ?? 0)|\(blocked.count)|\(woods)"
+    }
+
+    static func chart(key: String, build: @Sendable () -> IslandChart) async -> IslandChart {
+        lock.lock()
+        if storedKey == key, !storedChart.ground.isEmpty {
+            let hit = storedChart
+            lock.unlock()
+            return hit
+        }
+        lock.unlock()
+        let started = CFAbsoluteTimeGetCurrent()
+        let built = await Task.detached(priority: .userInitiated, operation: build).value
+        OrchardTiming.log(String(format: "island generate %.3fs ground %d decor %d", CFAbsoluteTimeGetCurrent() - started, built.ground.count, built.decor.count))
+        lock.lock()
+        storedKey = key
+        storedChart = built
+        lock.unlock()
+        return built
     }
 }
 
@@ -472,6 +503,7 @@ enum Woodland {
         var placed = Set<FarmTile>()
         var decor: [DecorRecord] = []
         let front = clearing.map { $0.column + $0.row }.max() ?? 0
+        let frontZone = frontBand(clearing: clearing, front: front)
         func add(_ name: String, _ tile: FarmTile, _ salt: UInt64) {
             guard ground.contains(tile) || lakes.contains(tile) || !ground.contains(tile) else { return }
             guard placed.insert(tile).inserted else { return }
@@ -489,7 +521,7 @@ enum Woodland {
         for tile in groves {
             let roll = unit(seed, tile.column, tile.row, 9)
             let cluster = field(tile.column, tile.row, seed: seed, cell: 4, salt: 8)
-            if isFront(tile, front: front, clearing: clearing) {
+            if frontZone.contains(tile) {
                 if roll < 0.55 {
                     add(understory(seed: seed, tile: tile, salt: 10), tile, 10)
                 }
@@ -516,7 +548,7 @@ enum Woodland {
             add(understory(seed: seed, tile: tile, salt: 13), tile, 13)
         }
         let edge = free.filter { tile in
-            orthogonal(tile).contains { !clearing.contains($0) } && !isFront(tile, front: front, clearing: clearing)
+            orthogonal(tile).contains { !clearing.contains($0) } && !frontZone.contains(tile)
         }
         let tallEdges = edge.sorted { mix(seed, $0.column, $0.row, 14) < mix(seed, $1.column, $1.row, 14) }
         for tile in tallEdges.prefix(3) where !placed.contains(tile) {
@@ -574,13 +606,19 @@ enum Woodland {
         return names[index]
     }
 
-    private static func isFront(_ tile: FarmTile, front: Int, clearing: Set<FarmTile>) -> Bool {
-        guard tile.column + tile.row > front + 1 else { return false }
-        for spot in clearing {
-            let span = max(abs(spot.column - tile.column), abs(spot.row - tile.row))
-            if span <= 3 { return true }
+    private static func frontBand(clearing: Set<FarmTile>, front: Int) -> Set<FarmTile> {
+        var band = Set<FarmTile>()
+        for spot in clearing where spot.column + spot.row >= front - 1 {
+            for column in (spot.column - 3)...(spot.column + 3) {
+                for row in (spot.row - 3)...(spot.row + 3) where max(abs(column - spot.column), abs(row - spot.row)) <= 3 {
+                    let tile = FarmTile(column: column, row: row)
+                    if tile.column + tile.row > front + 1 {
+                        band.insert(tile)
+                    }
+                }
+            }
         }
-        return false
+        return band
     }
 
     private static func coastTiles(in land: Set<FarmTile>) -> Set<FarmTile> {

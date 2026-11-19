@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-struct FarmTile: Hashable, Equatable {
+struct FarmTile: Hashable, Equatable, Sendable {
     var column: Int
     var row: Int
 }

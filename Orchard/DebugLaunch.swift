@@ -1,5 +1,15 @@
 import Foundation
 
+enum OrchardTiming {
+    static let boot = CFAbsoluteTimeGetCurrent()
+
+    static func log(_ message: String) {
+        #if DEBUG
+        print(String(format: "orchard.timing %.3fs %@", CFAbsoluteTimeGetCurrent() - boot, message))
+        #endif
+    }
+}
+
 enum DebugLaunch {
     static var demoTerrain: Bool {
         #if DEBUG

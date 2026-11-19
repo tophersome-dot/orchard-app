@@ -30,6 +30,7 @@ struct FarmMapView: View {
     var decor: [DecorRecord] = []
     var chart: IslandChart = .placeholder
     var shoreSeed: UInt64 = 1
+    @State private var terrainCache = TerrainDrawCache()
 
     private var zones: [String: String] {
         Dictionary(uniqueKeysWithValues: plants.map { ($0.key, $0.value.zone) })
@@ -94,68 +95,70 @@ struct FarmMapView: View {
     private var grass: some View {
         Canvas { context, size in
             let ground = groundPath(in: size)
-            context.clip(to: ground, style: FillStyle(eoFill: false))
+            guard !ground.isEmpty else { return }
             let pitch = max(IsoMap.tileWidth * 3.5 * camera.scale, 1)
             let origin = camera.screenPoint(.zero, in: size)
-            let bleed: CGFloat = 2
             let resolved = context.resolve(Image(FarmSprite.grass))
-            let firstColumn = Int(floor((0 - origin.x) / pitch)) - 1
-            let lastColumn = Int(ceil((size.width - origin.x) / pitch)) + 1
-            let firstRow = Int(floor((0 - origin.y) / pitch)) - 1
-            let lastRow = Int(ceil((size.height - origin.y) / pitch)) + 1
-            for row in firstRow...lastRow {
-                for column in firstColumn...lastColumn {
-                    let rect = CGRect(
-                        x: origin.x + CGFloat(column) * pitch - bleed,
-                        y: origin.y + CGFloat(row) * pitch - bleed,
-                        width: pitch + bleed * 2,
-                        height: pitch + bleed * 2
-                    )
-                    context.draw(resolved, in: rect)
+            context.drawLayer { layer in
+                layer.clip(to: ground, style: FillStyle(eoFill: false))
+                let bleed: CGFloat = 2
+                let firstColumn = Int(floor((0 - origin.x) / pitch)) - 1
+                let lastColumn = Int(ceil((size.width - origin.x) / pitch)) + 1
+                let firstRow = Int(floor((0 - origin.y) / pitch)) - 1
+                let lastRow = Int(ceil((size.height - origin.y) / pitch)) + 1
+                for row in firstRow...lastRow {
+                    for column in firstColumn...lastColumn {
+                        let rect = CGRect(
+                            x: origin.x + CGFloat(column) * pitch - bleed,
+                            y: origin.y + CGFloat(row) * pitch - bleed,
+                            width: pitch + bleed * 2,
+                            height: pitch + bleed * 2
+                        )
+                        layer.draw(resolved, in: rect)
+                    }
                 }
-            }
-            let fresh = GraphicsContext.Shading.color(FarmColor.freshGrass)
-            context.drawLayer { layer in
-                layer.blendMode = .color
-                layer.opacity = 0.82
-                layer.fill(Path(CGRect(origin: .zero, size: size)), with: fresh)
-            }
-            context.drawLayer { layer in
-                layer.blendMode = .softLight
-                layer.opacity = 0.4
-                layer.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(red: 0.78, green: 0.93, blue: 0.45)))
-            }
-            let shade = Color(red: 0.22, green: 0.42, blue: 0.08)
-            for tile in [FarmTile(column: -6, row: 6), FarmTile(column: 10, row: 16), FarmTile(column: 18, row: 2)] {
-                let center = camera.screenPoint(IsoMap.center(tile), in: size)
-                let radius = IsoMap.tileWidth * 8 * camera.scale
-                let gradient = Gradient(stops: [
-                    .init(color: shade.opacity(0.22), location: 0),
-                    .init(color: shade.opacity(0.08), location: 0.4),
-                    .init(color: shade.opacity(0), location: 1)
-                ])
-                context.fill(
-                    Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)),
-                    with: .radialGradient(gradient, center: center, startRadius: 0, endRadius: radius)
-                )
-            }
-            for tint in chart.tints {
-                let center = camera.screenPoint(IsoMap.center(tint.tile), in: size)
-                let radius = IsoMap.tileWidth * tint.radius * camera.scale
-                let color = tint.light
-                    ? Color(red: 0.78, green: 0.92, blue: 0.46)
-                    : Color(red: 0.20, green: 0.38, blue: 0.08)
-                let gradient = Gradient(stops: [
-                    .init(color: color.opacity(tint.light ? 0.28 : 0.22), location: 0),
-                    .init(color: color.opacity(0.08), location: 0.55),
-                    .init(color: color.opacity(0), location: 1)
-                ])
-                context.drawLayer { layer in
-                    layer.blendMode = tint.light ? .softLight : .multiply
+                layer.drawLayer { tint in
+                    tint.blendMode = .color
+                    tint.opacity = 0.82
+                    tint.fill(Path(CGRect(origin: .zero, size: size)), with: .color(FarmColor.freshGrass))
+                }
+                layer.drawLayer { tint in
+                    tint.blendMode = .softLight
+                    tint.opacity = 0.4
+                    tint.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(red: 0.78, green: 0.93, blue: 0.45)))
+                }
+                let shade = Color(red: 0.22, green: 0.42, blue: 0.08)
+                for tile in [FarmTile(column: -6, row: 6), FarmTile(column: 10, row: 16), FarmTile(column: 18, row: 2)] where chart.ground.contains(tile) {
+                    let center = camera.screenPoint(IsoMap.center(tile), in: size)
+                    let radius = IsoMap.tileWidth * 8 * camera.scale
+                    let gradient = Gradient(stops: [
+                        .init(color: shade.opacity(0.22), location: 0),
+                        .init(color: shade.opacity(0.08), location: 0.4),
+                        .init(color: shade.opacity(0), location: 1)
+                    ])
                     layer.fill(
-                        Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius * 0.55, width: radius * 2, height: radius * 1.1)),
+                        Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)),
                         with: .radialGradient(gradient, center: center, startRadius: 0, endRadius: radius)
                     )
+                }
+                for tintSpot in chart.tints where visibleTileBounds(in: size, margin: 4).contains(tintSpot.tile) {
+                    let center = camera.screenPoint(IsoMap.center(tintSpot.tile), in: size)
+                    let radius = IsoMap.tileWidth * tintSpot.radius * camera.scale
+                    let color = tintSpot.light
+                        ? Color(red: 0.78, green: 0.92, blue: 0.46)
+                        : Color(red: 0.20, green: 0.38, blue: 0.08)
+                    let gradient = Gradient(stops: [
+                        .init(color: color.opacity(tintSpot.light ? 0.28 : 0.22), location: 0),
+                        .init(color: color.opacity(0.08), location: 0.55),
+                        .init(color: color.opacity(0), location: 1)
+                    ])
+                    layer.drawLayer { tint in
+                        tint.blendMode = tintSpot.light ? .softLight : .multiply
+                        tint.fill(
+                            Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius * 0.55, width: radius * 2, height: radius * 1.1)),
+                            with: .radialGradient(gradient, center: center, startRadius: 0, endRadius: radius)
+                        )
+                    }
                 }
             }
         }
@@ -692,24 +695,14 @@ struct FarmMapView: View {
     }
 
     private func drawTerrains(in context: GraphicsContext, size: CGSize) {
-        let order: [FarmItemKind] = [.forest, .longgrass, .dirt, .sand, .path, .tilled]
-        let onIsland = chart.ground.union(chart.water)
-        var fills: [(FarmItemKind, Set<FarmTile>)] = []
-        for kind in order {
-            let tiles = Set(terrain.compactMap { tile, painted in
-                guard painted == kind else { return nil }
-                if kind == .forest || kind == .longgrass || kind == .dirt, !onIsland.contains(tile) {
-                    return nil
-                }
-                return tile
-            })
-            if !tiles.isEmpty {
-                fills.append((kind, tiles))
-            }
-        }
-        for (kind, tiles) in fills {
+        let prepared = preparedTerrain()
+        let bounds = visibleTileBounds(in: size, margin: 2)
+        let view = CGRect(origin: .zero, size: size).insetBy(dx: -32, dy: -32)
+        for (kind, tiles) in prepared.fills {
             guard let name = FarmSprite.terrainFill(kind) else { continue }
-            let union = diamondUnion(tiles, in: size)
+            let visible = tiles.filter { bounds.contains($0) }
+            guard !visible.isEmpty else { continue }
+            let union = diamondUnion(visible, in: size)
             let resolved = context.resolve(Image(name))
             context.drawLayer { layer in
                 layer.clip(to: union, style: FillStyle(eoFill: false))
@@ -717,15 +710,20 @@ struct FarmMapView: View {
                 drawWarped(resolved, layer: &layer, size: size, pixelsPerCell: pixelsPerCell)
             }
         }
-        for (kind, tiles) in fills {
+        for (kind, edges) in prepared.edges {
             guard let name = FarmSprite.terrainEdge(kind) else { continue }
             let resolved = context.resolve(Image(name))
             let feather: CGFloat? = (kind == .forest || kind == .longgrass || kind == .dirt) ? 0.22 : nil
-            for boundary in FarmSurface.boundaryEdges(of: tiles) {
+            for boundary in edges {
+                let middle = CGPoint(
+                    x: (boundary.edge.anchor.x + boundary.edge.end.x) / 2,
+                    y: (boundary.edge.anchor.y + boundary.edge.end.y) / 2
+                )
+                guard view.contains(camera.screenPoint(middle, in: size)) else { continue }
                 drawEdgeStrip(
                     resolved,
                     edge: boundary.edge,
-                    owner: boundary.outwardFrom,
+                    owner: boundary.owner,
                     kind: kind,
                     in: context,
                     size: size,
@@ -733,6 +731,45 @@ struct FarmMapView: View {
                 )
             }
         }
+    }
+
+    /// Tile sets and outer edges, rebuilt only when the painted terrain or the island changes.
+    private func preparedTerrain() -> TerrainDrawCache {
+        var hasher = Hasher()
+        hasher.combine(chart.ground.count)
+        hasher.combine(chart.lakes.count)
+        hasher.combine(chart.creek.count)
+        hasher.combine(terrain.count)
+        for (tile, kind) in terrain {
+            hasher.combine(tile.column)
+            hasher.combine(tile.row)
+            hasher.combine(kind.rawValue)
+        }
+        let key = hasher.finalize()
+        if terrainCache.key == key {
+            return terrainCache
+        }
+        let order: [FarmItemKind] = [.forest, .longgrass, .dirt, .sand, .path, .tilled]
+        let onIsland = chart.ground.union(chart.water)
+        var fills: [(FarmItemKind, Set<FarmTile>)] = []
+        var edges: [(FarmItemKind, [(edge: FarmGridEdge, owner: FarmTile)])] = []
+        for kind in order {
+            let tiles = Set(terrain.compactMap { (tile, painted) -> FarmTile? in
+                guard painted == kind else { return nil }
+                if kind == .forest || kind == .longgrass || kind == .dirt, !onIsland.contains(tile) {
+                    return nil
+                }
+                return tile
+            })
+            guard !tiles.isEmpty else { continue }
+            fills.append((kind, tiles))
+            let boundary = FarmSurface.boundaryEdges(of: tiles).map { (edge: $0.edge, owner: $0.outwardFrom) }
+            edges.append((kind, boundary))
+        }
+        terrainCache.key = key
+        terrainCache.fills = fills
+        terrainCache.edges = edges
+        return terrainCache
     }
 
     /// One path for the whole group. Each diamond is grown by half a point so the anti-aliased edges overlap and no seam shows between cells.
@@ -961,6 +998,12 @@ private extension FarmItemKind {
         case .house: 0.6
         }
     }
+}
+
+private final class TerrainDrawCache {
+    var key: Int?
+    var fills: [(FarmItemKind, Set<FarmTile>)] = []
+    var edges: [(FarmItemKind, [(edge: FarmGridEdge, owner: FarmTile)])] = []
 }
 
 private struct TileBounds {

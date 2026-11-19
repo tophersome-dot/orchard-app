@@ -5,7 +5,7 @@ enum FarmLayout {
     /// Makes sure the starter yard exists and every tasted variety has a spot.
     /// Safe to call more than once. Does not move anything the player already placed.
     @MainActor
-    static func sync(context: ModelContext, tried: [(id: String, zone: String)]) throws {
+    static func sync(context: ModelContext, tried: [(id: String, zone: String)]) async throws {
         let existing = try context.fetch(FetchDescriptor<FarmPlacement>())
         let records = existing.map(\.record)
         let tastedCount = Set(tried.map(\.id)).count
@@ -19,12 +19,12 @@ enum FarmLayout {
         }
         let zones = Dictionary(uniqueKeysWithValues: tried.map { ($0.id, $0.zone) })
         try ensureTilledBeds(in: context, zones: zones)
-        try ensureWoodland(in: context, zones: zones, tastedCount: Set(tried.map(\.id)).count)
+        try await ensureWoodland(in: context, zones: zones, tastedCount: Set(tried.map(\.id)).count)
     }
 
     /// Grows the island and fills new land. Existing clears, paints, and moved decor stay put.
     @MainActor
-    private static func ensureWoodland(in context: ModelContext, zones: [String: String], tastedCount: Int) throws {
+    private static func ensureWoodland(in context: ModelContext, zones: [String: String], tastedCount: Int) async throws {
         let worlds = try context.fetch(FetchDescriptor<FarmWorld>())
         let world: FarmWorld
         if let existing = worlds.first {
@@ -46,76 +46,69 @@ enum FarmLayout {
         let clearing = FarmExpansion.clearingTiles(for: plan)
         let blocked = Woodland.blockedTiles(records: records, plan: plan)
         let woodsOn = !DebugLaunch.noWoods
-        let chart = Woodland.make(
-            seed: UInt64(world.seed),
-            level: level,
-            clearing: clearing,
-            blocked: blocked,
-            woods: woodsOn
-        )
-        let previous = world.builtLevel >= 1
-            ? Woodland.make(
-                seed: UInt64(world.seed),
-                level: world.builtLevel,
+        let seedValue = world.seed
+        let key = IslandChartCache.cacheKey(seed: seedValue, level: level, clearing: clearing, blocked: blocked, woods: woodsOn)
+        let chart = await IslandChartCache.chart(key: key) {
+            Woodland.make(
+                seed: UInt64(bitPattern: Int64(seedValue)),
+                level: level,
                 clearing: clearing,
                 blocked: blocked,
                 woods: woodsOn
             )
-            : IslandChart.empty
-        let fresh = chart.ground.union(chart.water).subtracting(previous.ground).subtracting(previous.water)
-        let first = world.builtLevel < 1
+        }
+        let rebuild = world.builtLevel < 1 || world.builtLevel != level
         let cleared = Set(records.filter { $0.kind == .cleared }.map(\.tile))
         var changed = false
-
-        func terrain(at tile: FarmTile) -> [FarmPlacement] {
-            placements.filter { $0.column == tile.column && $0.row == tile.row && $0.record.kind.isTerrain }
+        var byTile: [FarmTile: [FarmPlacement]] = [:]
+        for item in placements where item.record.kind.isTerrain {
+            let tile = FarmTile(column: item.column, row: item.row)
+            byTile[tile, default: []].append(item)
         }
-
-        for tile in chart.lakes {
-            let existing = terrain(at: tile)
-            if existing.contains(where: { $0.record.kind == .lake }) { continue }
-            for item in existing where item.record.kind != .path {
-                context.delete(item)
+        func ensureWater(_ tiles: Set<FarmTile>, kind: FarmItemKind) {
+            for tile in tiles {
+                let existing = byTile[tile] ?? []
+                if existing.contains(where: { $0.record.kind == kind }) { continue }
+                for item in existing where item.record.kind != .path {
+                    context.delete(item)
+                }
+                let placed = FarmPlacement(id: UUID(), kindRaw: kind.rawValue, varietySlug: nil, column: tile.column, row: tile.row)
+                context.insert(placed)
+                byTile[tile] = [placed]
+                changed = true
             }
-            context.insert(FarmPlacement(id: UUID(), kindRaw: FarmItemKind.lake.rawValue, varietySlug: nil, column: tile.column, row: tile.row))
-            changed = true
         }
-        for tile in chart.creek {
-            let existing = terrain(at: tile)
-            if existing.contains(where: { $0.record.kind == .creek }) { continue }
-            for item in existing where item.record.kind != .path {
-                context.delete(item)
-            }
-            context.insert(FarmPlacement(id: UUID(), kindRaw: FarmItemKind.creek.rawValue, varietySlug: nil, column: tile.column, row: tile.row))
-            changed = true
-        }
+        ensureWater(chart.lakes, .lake)
+        ensureWater(chart.creek, .creek)
 
-        let claimed = Set(records.filter { record in
+        var claimed = Set<FarmTile>()
+        var forestTiles = Set<FarmTile>()
+        var longgrassTiles = Set<FarmTile>()
+        var dirtTiles = Set<FarmTile>()
+        for record in records {
             switch record.kind {
-            case .path, .dirt, .sand, .longgrass, .tilled, .cleared: true
-            default: false
+            case .path, .sand, .tilled, .cleared:
+                claimed.insert(record.tile)
+            case .longgrass:
+                longgrassTiles.insert(record.tile)
+                claimed.insert(record.tile)
+            case .dirt:
+                dirtTiles.insert(record.tile)
+                claimed.insert(record.tile)
+            case .forest:
+                forestTiles.insert(record.tile)
+            default:
+                break
             }
-        }.map(\.tile))
+        }
 
-        if woodsOn {
-            for tile in chart.groves where !clearing.contains(tile) && !cleared.contains(tile) && !claimed.contains(tile) {
-                if records.contains(where: { $0.kind == .forest && $0.tile == tile }) { continue }
-                guard first || fresh.contains(tile) else { continue }
-                context.insert(FarmPlacement(id: UUID(), kindRaw: FarmItemKind.forest.rawValue, varietySlug: nil, column: tile.column, row: tile.row))
-                changed = true
-            }
-            for tile in chart.glades where !claimed.contains(tile) && (first || fresh.contains(tile)) {
-                if records.contains(where: { $0.kind == .longgrass && $0.tile == tile }) { continue }
-                context.insert(FarmPlacement(id: UUID(), kindRaw: FarmItemKind.longgrass.rawValue, varietySlug: nil, column: tile.column, row: tile.row))
-                changed = true
-            }
-            for tile in chart.dirt where !claimed.contains(tile) && (first || fresh.contains(tile)) {
-                if records.contains(where: { $0.kind == .dirt && $0.tile == tile }) { continue }
-                context.insert(FarmPlacement(id: UUID(), kindRaw: FarmItemKind.dirt.rawValue, varietySlug: nil, column: tile.column, row: tile.row))
-                changed = true
-            }
-            for tile in clearing {
-                for item in placements where item.column == tile.column && item.row == tile.row && item.record.kind == .forest {
+        if woodsOn && rebuild {
+            changed = insertTerrain(chart.groves, kind: .forest, existing: forestTiles, blocked: claimed.union(clearing).union(cleared), in: context) || changed
+            changed = insertTerrain(chart.glades, kind: .longgrass, existing: longgrassTiles, blocked: claimed, in: context) || changed
+            changed = insertTerrain(chart.dirt, kind: .dirt, existing: dirtTiles, blocked: claimed, in: context) || changed
+            for item in placements where item.record.kind == .forest {
+                let tile = FarmTile(column: item.column, row: item.row)
+                if !chart.groves.contains(tile) || clearing.contains(tile) {
                     context.delete(item)
                     changed = true
                 }
@@ -123,15 +116,14 @@ enum FarmLayout {
         }
 
         let storedDecor = try context.fetch(FetchDescriptor<FarmDecor>())
-        if woodsOn {
+        if woodsOn && rebuild {
             let haveTiles = Set(storedDecor.map { FarmTile(column: $0.column, row: $0.row) })
             let haveIDs = Set(storedDecor.map(\.id))
+            var inserted = 0
             for draft in chart.decor {
                 let tile = draft.tile
                 if haveTiles.contains(tile) || haveIDs.contains(draft.id) || cleared.contains(tile) { continue }
-                let touchesFresh = Woodland.orthogonal(tile).contains { fresh.contains($0) }
-                guard first || fresh.contains(tile) || touchesFresh else { continue }
-                if clearing.contains(tile) && !first { continue }
+                if clearing.contains(tile), let sprite = Woodland.sprite(draft.sprite), sprite.isTall { continue }
                 context.insert(FarmDecor(
                     id: draft.id,
                     sprite: draft.sprite,
@@ -142,10 +134,18 @@ enum FarmLayout {
                     rotation: draft.rotation,
                     origin: draft.origin
                 ))
+                inserted += 1
                 changed = true
+                if inserted.isMultiple(of: 400) {
+                    await Task.yield()
+                }
             }
-            for item in storedDecor where item.origin == "gen" && clearing.contains(FarmTile(column: item.column, row: item.row)) {
-                if let sprite = Woodland.sprite(item.sprite), sprite.isTall {
+            let alive = chart.ground.union(chart.water)
+            for item in storedDecor where item.origin == "gen" {
+                let tile = FarmTile(column: item.column, row: item.row)
+                let onLand = alive.contains(tile) || Woodland.orthogonal(tile).contains { chart.ground.contains($0) }
+                let coversFarm = clearing.contains(tile) && (Woodland.sprite(item.sprite)?.isTall ?? false)
+                if !onLand || coversFarm {
                     context.delete(item)
                     changed = true
                 }
@@ -159,6 +159,22 @@ enum FarmLayout {
         if changed {
             try context.save()
         }
+    }
+
+    @MainActor
+    private static func insertTerrain(
+        _ tiles: Set<FarmTile>,
+        kind: FarmItemKind,
+        existing: Set<FarmTile>,
+        blocked: Set<FarmTile>,
+        in context: ModelContext
+    ) -> Bool {
+        var changed = false
+        for tile in tiles where !existing.contains(tile) && !blocked.contains(tile) {
+            context.insert(FarmPlacement(id: UUID(), kindRaw: kind.rawValue, varietySlug: nil, column: tile.column, row: tile.row))
+            changed = true
+        }
+        return changed
     }
 
     /// Drops seeded woods so a new generator can fill the current island. Placed decor stays.

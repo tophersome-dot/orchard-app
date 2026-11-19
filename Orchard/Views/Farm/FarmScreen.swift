@@ -281,6 +281,7 @@ struct FarmScreen: View {
         .task(id: triedSignature) {
             // The grass frame commits before any PNG decode or store rewrite.
             await Task.yield()
+            OrchardTiming.log("farm first frame")
             await FarmSprite.warm(spritesToWarm())
             if !scenery {
                 scenery = true
@@ -292,7 +293,7 @@ struct FarmScreen: View {
             await Task.yield()
             guard !varieties.isEmpty else { return }
             let tried = varieties.filter(\.isTried).map { (id: $0.slug, zone: $0.zoneRaw) }
-            try? FarmLayout.sync(context: context, tried: tried)
+            try? await FarmLayout.sync(context: context, tried: tried)
             updateChart()
             if !userMoved {
                 framed = false
@@ -711,19 +712,25 @@ struct FarmScreen: View {
     private func updateChart() {
         let level = Woodland.level(tastedCount: tastedCount)
         let seed = worlds.first?.seed ?? 1
-        let home = FarmExpansion.plots(for: yardPlan).first
-        let key = "\(seed)-\(level)-\(home?.columns.upperBound ?? 0)-\(home?.rows.upperBound ?? 0)-\(DebugLaunch.noWoods)"
-        if key == chartKey, !chart.ground.isEmpty { return }
-        chartKey = key
         let clearing = FarmExpansion.clearingTiles(for: yardPlan)
         let blocked = Woodland.blockedTiles(records: records, plan: yardPlan)
-        chart = Woodland.make(
-            seed: UInt64(bitPattern: Int64(seed)),
-            level: level,
-            clearing: clearing,
-            blocked: blocked,
-            woods: !DebugLaunch.noWoods
-        )
+        let woods = !DebugLaunch.noWoods
+        let key = IslandChartCache.cacheKey(seed: seed, level: level, clearing: clearing, blocked: blocked, woods: woods)
+        if key == chartKey, !chart.ground.isEmpty { return }
+        chartKey = key
+        Task {
+            let next = await IslandChartCache.chart(key: key) {
+                Woodland.make(
+                    seed: UInt64(bitPattern: Int64(seed)),
+                    level: level,
+                    clearing: clearing,
+                    blocked: blocked,
+                    woods: woods
+                )
+            }
+            guard chartKey == key else { return }
+            chart = next
+        }
     }
 
     private func tile(at location: CGPoint, in viewSize: CGSize) -> FarmTile {

@@ -15,6 +15,10 @@ final class WoodlandTests: XCTestCase {
         XCTAssertGreaterThan(start.ground.count, clearing.count + 400)
         let eighth = Woodland.make(seed: 11, level: 8, clearing: clearing, blocked: [], woods: false)
         XCTAssertGreaterThan(Double(eighth.ground.count), Double(start.ground.count) * 2)
+        let coast = start.ground.contains { tile in
+            Woodland.orthogonal(tile).contains { !start.ground.contains($0) && !start.water.contains($0) }
+        }
+        XCTAssertTrue(coast, "Level 1 land should meet the ocean")
     }
 
     func testCoastHasNoSpikesOrNotches() {
