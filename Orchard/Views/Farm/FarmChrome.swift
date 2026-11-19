@@ -78,36 +78,67 @@ struct FarmEditToolbar: View {
     var onDone: () -> Void
 
     var body: some View {
-        HStack(spacing: 6) {
-            tool("Move", "arrow.up.and.down.and.arrow.left.and.right", on: moveOn, action: onMove)
-            tool("Paint", "paintbrush", on: paintOn, action: onPaint)
-            tool("Axe", "axe.fill", on: axeOn, action: onAxe)
-            tool("Store", "archivebox", on: storageOn, action: onStorage)
-            tool("Undo", "arrow.uturn.backward", on: false, action: onUndo)
-                .disabled(!canUndo)
-                .opacity(canUndo ? 1 : 0.4)
-            tool("Done", "checkmark", on: false, action: onDone)
+        HStack(spacing: 2) {
+            tool("Move", "arrow.up.and.down.and.arrow.left.and.right", on: moveOn, enabled: true, action: onMove)
+            tool("Paint", "paintbrush", on: paintOn, enabled: true, action: onPaint)
+            tool("Axe", "axe", on: axeOn, enabled: true, action: onAxe)
+            tool("Store", "archivebox", on: storageOn, enabled: true, action: onStorage)
+            tool("Undo", "arrow.uturn.backward", on: false, enabled: canUndo, action: onUndo)
+            tool("Done", "checkmark", on: false, enabled: true, action: onDone)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 8)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
-    private func tool(_ title: String, _ symbol: String, on: Bool, action: @escaping () -> Void) -> some View {
+    private func tool(_ title: String, _ symbol: String, on: Bool, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 3) {
-                Image(systemName: symbol)
-                    .font(.system(size: 16, weight: .semibold))
+                if symbol == "axe" {
+                    AxeIcon()
+                        .frame(width: 18, height: 18)
+                } else {
+                    Image(systemName: symbol)
+                        .font(.system(size: 16, weight: .semibold))
+                        .frame(height: 18)
+                }
                 Text(title)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
-            .foregroundStyle(on ? OrchardColor.grassDeep : OrchardColor.ink)
+            .foregroundStyle(on ? OrchardColor.grassDeep : (enabled ? OrchardColor.ink : Color.secondary))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 6)
             .background(on ? Color.white.opacity(0.72) : Color.clear, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
+        .allowsHitTesting(enabled)
         .accessibilityLabel(title)
+    }
+}
+
+/// A thin axe: handle plus a curved blade. SF Symbols has no axe glyph.
+struct AxeIcon: View {
+    var body: some View {
+        Canvas { context, size in
+            var handle = Path()
+            handle.move(to: CGPoint(x: size.width * 0.58, y: size.height * 0.22))
+            handle.addLine(to: CGPoint(x: size.width * 0.30, y: size.height * 0.92))
+            context.stroke(handle, with: .foreground, style: StrokeStyle(lineWidth: 1.7, lineCap: .round))
+            var blade = Path()
+            blade.move(to: CGPoint(x: size.width * 0.46, y: size.height * 0.20))
+            blade.addQuadCurve(
+                to: CGPoint(x: size.width * 0.92, y: size.height * 0.30),
+                control: CGPoint(x: size.width * 0.78, y: size.height * 0.0)
+            )
+            blade.addQuadCurve(
+                to: CGPoint(x: size.width * 0.52, y: size.height * 0.46),
+                control: CGPoint(x: size.width * 0.86, y: size.height * 0.52)
+            )
+            blade.closeSubpath()
+            context.fill(blade, with: .foreground)
+        }
     }
 }
 
@@ -335,30 +366,28 @@ struct FarmMinimap: View {
     }
 }
 
-struct FarmHintLayer: View {
-    var force: Bool
-    @AppStorage("orchard.hint.pinch") private var pinch = false
-    @AppStorage("orchard.hint.hold") private var hold = false
-    @AppStorage("orchard.hint.edit") private var edit = false
+enum FarmHintStep: Int {
+    case pinch = 0
+    case hold = 1
+    case edit = 2
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if force || !pinch {
-                bubble("Pinch to zoom", key: "pinch") { pinch = true }
-            }
-            if force || (pinch && !hold) {
-                bubble("Press and hold to move", key: "hold") { hold = true }
-            }
-            if force || (pinch && hold && !edit) {
-                bubble("Edit to decorate", key: "edit") { edit = true }
-            }
+    var text: String {
+        switch self {
+        case .pinch: "Pinch to zoom"
+        case .hold: "Press and hold to move"
+        case .edit: "Edit to decorate"
         }
     }
+}
 
-    private func bubble(_ text: String, key: String, dismiss: @escaping () -> Void) -> some View {
-        Button(action: dismiss) {
+struct FarmHintChip: View {
+    var step: FarmHintStep
+    var onDismiss: () -> Void
+
+    var body: some View {
+        Button(action: onDismiss) {
             HStack(spacing: 8) {
-                Text(text)
+                Text(step.text)
                     .font(.system(size: 13, weight: .semibold))
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .bold))
@@ -369,7 +398,7 @@ struct FarmHintLayer: View {
             .background(.ultraThinMaterial, in: Capsule())
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("hint-\(key)")
+        .accessibilityIdentifier("hint-\(step.rawValue)")
     }
 }
 

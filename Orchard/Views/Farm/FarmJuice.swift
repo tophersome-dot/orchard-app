@@ -53,7 +53,6 @@ struct FarmJuiceOverlay: View {
         TimelineView(.animation(minimumInterval: reduceMotion ? 0.2 : 1.0 / 30.0)) { timeline in
             Canvas { context, _ in
                 let now = timeline.date
-                drawButterfly(at: now, in: context)
                 if let selected {
                     drawPulse(at: selected, now: now, in: context)
                 }
@@ -175,17 +174,5 @@ struct FarmJuiceOverlay: View {
         let alpha = 0.35 + 0.15 * sin(now.timeIntervalSinceReferenceDate * 5)
         let rect = CGRect(x: point.x - radius, y: point.y - radius * 0.55, width: radius * 2, height: radius * 1.1)
         context.stroke(Path(ellipseIn: rect), with: .color(Color.white.opacity(alpha)), lineWidth: 3)
-    }
-
-    private func drawButterfly(at date: Date, in context: GraphicsContext) {
-        guard !reduceMotion else { return }
-        let time = date.timeIntervalSinceReferenceDate
-        let x = canvasSize.width * 0.5 + CGFloat(sin(time * 0.35)) * canvasSize.width * 0.28
-        let y = canvasSize.height * 0.32 + CGFloat(sin(time * 0.8)) * 24
-        let wing = 5 + 3 * abs(sin(time * 14))
-        let left = CGRect(x: x - wing - 1, y: y - 2, width: wing, height: 4)
-        let right = CGRect(x: x + 1, y: y - 2, width: wing, height: 4)
-        context.fill(Path(ellipseIn: left), with: .color(Color(red: 0.95, green: 0.78, blue: 0.35).opacity(0.85)))
-        context.fill(Path(ellipseIn: right), with: .color(Color(red: 0.95, green: 0.78, blue: 0.35).opacity(0.85)))
     }
 }

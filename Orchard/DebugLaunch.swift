@@ -28,14 +28,39 @@ enum DebugLaunch {
         #endif
     }
 
-    /// Overrides the collection level that sizes the island. Example: `-islandLevel 1`
+    /// Overrides the collection level that sizes the island and the level ring. Example: `-islandLevel 1`
     static var islandLevel: Int? {
         #if DEBUG
-        guard let raw = flagValue("islandLevel"), let value = Int(raw), value > 0 else { return nil }
-        return value
+        let args = ProcessInfo.processInfo.arguments
+        for (index, arg) in args.enumerated() {
+            let token = arg.lowercased()
+            if token == "-islandlevel" {
+                if index + 1 < args.count, let value = positiveInt(args[index + 1]) {
+                    return value
+                }
+                continue
+            }
+            if token.hasPrefix("-islandlevel=") {
+                let raw = String(arg.dropFirst("-islandlevel=".count))
+                if let value = positiveInt(raw) { return value }
+            }
+        }
+        if let raw = flagValue("islandLevel"), let value = positiveInt(raw) {
+            return value
+        }
+        return nil
         #else
         return nil
         #endif
+    }
+
+    /// `1` and `1.0` both count. A following flag such as `-seedSampleTastings` does not.
+    static func positiveInt(_ raw: String) -> Int? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("-") else { return nil }
+        if let value = Int(trimmed), value > 0 { return value }
+        if let value = Double(trimmed), value >= 1 { return Int(value) }
+        return nil
     }
 
     static var seedSampleTastings: Bool {
@@ -63,19 +88,20 @@ enum DebugLaunch {
         let args = ProcessInfo.processInfo.arguments
         let dashed = name.hasPrefix("-") ? name : "-" + name
         if let index = args.firstIndex(of: dashed), index + 1 < args.count {
-            return args[index + 1]
+            let next = args[index + 1]
+            if !next.hasPrefix("-") { return next }
         }
         let prefix = dashed + "="
         if let inline = args.first(where: { $0.hasPrefix(prefix) }) {
             return String(inline.dropFirst(prefix.count))
         }
         let key = String(dashed.dropFirst())
-        if let text = UserDefaults.standard.string(forKey: key), !text.isEmpty {
+        if let text = UserDefaults.standard.string(forKey: key), !text.isEmpty, !text.hasPrefix("-") {
             return text
         }
-        if UserDefaults.standard.object(forKey: key) != nil {
-            let number = UserDefaults.standard.double(forKey: key)
-            if number != 0 { return String(number) }
+        if let number = UserDefaults.standard.object(forKey: key) as? NSNumber, number.doubleValue != 0 {
+            if number.doubleValue == Double(number.intValue) { return String(number.intValue) }
+            return number.stringValue
         }
         return nil
     }

@@ -93,6 +93,13 @@ final class WoodlandTests: XCTestCase {
         XCTAssertTrue(parked.contains { $0.kind == .house })
     }
 
+    func testIslandLevelNumberIgnoresAFollowingFlag() {
+        XCTAssertEqual(DebugLaunch.positiveInt("1"), 1)
+        XCTAssertEqual(DebugLaunch.positiveInt("1.0"), 1)
+        XCTAssertEqual(DebugLaunch.positiveInt("8"), 8)
+        XCTAssertNil(DebugLaunch.positiveInt("-seedSampleTastings"))
+    }
+
     func testCoastChamferRemovesTheSquareCorner() {
         let square = [
             CGPoint(x: 0, y: 0),
