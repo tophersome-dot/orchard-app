@@ -191,7 +191,7 @@ struct FarmScreen: View {
                 category: variety.categoryRaw,
                 form: variety.form,
                 skin: variety.fruitSkin,
-                rating: variety.latestTasting?.overall
+                rating: variety.latestTasting?.scoreForDisplay
             ))
         })
     }
@@ -1145,7 +1145,7 @@ struct FarmScreen: View {
                 zone: variety.zoneRaw,
                 category: variety.categoryRaw,
                 varietyID: variety.slug,
-                rating: variety.latestTasting?.overall
+                rating: variety.latestTasting?.scoreForDisplay
             ))
         }
         names.append(contentsOf: Woodland.catalog.map(\.name))

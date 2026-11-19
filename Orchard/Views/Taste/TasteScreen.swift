@@ -14,6 +14,7 @@ struct TasteScreen: View {
     @State private var crunch = 3.0
     @State private var juicy = 3.0
     @State private var overall = 3.0
+    @State private var overallIsManual = false
     @State private var notes = ""
     @State private var image: UIImage?
     @State private var photoItem: PhotosPickerItem?
@@ -45,11 +46,29 @@ struct TasteScreen: View {
                 }
                 .orchardCard()
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Overall")
-                        .font(OrchardFont.title(16))
-                    AppleScorePicker(score: $overall)
+                    HStack(spacing: 8) {
+                        Text("Overall")
+                            .font(OrchardFont.title(16))
+                        if overallIsManual {
+                            Button(action: resetOverall) {
+                                Label("Reset", systemImage: "arrow.uturn.backward")
+                                    .font(OrchardFont.caption(12))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Reset overall to the slider average")
+                        } else {
+                            Label("Auto", systemImage: "sparkles")
+                                .font(OrchardFont.caption(12))
+                                .foregroundStyle(OrchardColor.grassDeep)
+                                .accessibilityLabel("Overall is the average of the sliders")
+                        }
+                    }
+                    AppleScorePicker(score: $overall) {
+                        overallIsManual = true
+                    }
                 }
                 .orchardCard()
+                .animation(.spring(response: 0.35, dampingFraction: 0.82), value: overall)
                 VStack(alignment: .leading, spacing: 8) {
                     Label("Notes", systemImage: "pencil")
                         .font(OrchardFont.title(16))
@@ -106,6 +125,7 @@ struct TasteScreen: View {
         }
         .onAppear(perform: applyDraft)
         .onChange(of: router.draftSlug) { _, _ in applyDraft() }
+        .onChange(of: sliderSignature) { _, _ in syncOverall() }
     }
 
     private var photoCard: some View {
@@ -166,6 +186,28 @@ struct TasteScreen: View {
         return "\(ProduceCategory(rawValue: variety.categoryRaw)?.singular ?? "Variety") · \(variety.name)"
     }
 
+    private var automaticOverall: Double {
+        TasteScore.automatic(sweet: sweet, tart: tart, crunch: crunch, juicy: juicy)
+    }
+
+    private var sliderSignature: String {
+        "\(sweet)|\(tart)|\(crunch)|\(juicy)"
+    }
+
+    private func syncOverall() {
+        guard !overallIsManual else { return }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+            overall = automaticOverall
+        }
+    }
+
+    private func resetOverall() {
+        overallIsManual = false
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+            overall = automaticOverall
+        }
+    }
+
     private func applyDraft() {
         guard let slug = router.draftSlug else { return }
         selectedSlug = slug
@@ -194,9 +236,10 @@ struct TasteScreen: View {
             tart: tart,
             crunch: crunch,
             juicy: juicy,
-            overall: overall,
+            overall: overallIsManual ? overall : automaticOverall,
             notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
-            photoData: image?.jpegData(compressionQuality: 0.8)
+            photoData: image?.jpegData(compressionQuality: 0.8),
+            overallIsOverride: overallIsManual
         )
         context.insert(tasting)
         tasting.variety = variety
@@ -229,6 +272,7 @@ private struct TasteSlider: View {
 
 private struct AppleScorePicker: View {
     @Binding var score: Double
+    var onAdjust: () -> Void
 
     var body: some View {
         HStack(spacing: 6) {
@@ -239,6 +283,8 @@ private struct AppleScorePicker: View {
             Text(String(format: "%.1f of 5", score))
                 .font(OrchardFont.title(16))
                 .foregroundStyle(OrchardColor.score(score))
+                .contentTransition(.numericText())
+                .animation(.spring(response: 0.35, dampingFraction: 0.82), value: score)
         }
     }
 
@@ -252,12 +298,14 @@ private struct AppleScorePicker: View {
                 }
         }
         .frame(width: 36, height: 36)
+        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: score)
         .contentShape(Rectangle())
         .gesture(
             DragGesture(minimumDistance: 0).onEnded { value in
                 let half = value.location.x < 18
                 let next = Double(index) - (half ? 0.5 : 0)
                 score = min(5, max(1, next))
+                onAdjust()
             }
         )
         .accessibilityLabel("Set overall to \(index)")

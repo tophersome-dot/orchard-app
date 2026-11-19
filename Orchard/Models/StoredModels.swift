@@ -148,6 +148,8 @@ final class Tasting {
     var crunch: Double
     var juicy: Double
     var overall: Double
+    /// False when overall is the average of the sliders. Existing rows default to a manual score.
+    var overallIsOverride: Bool = true
     var notes: String
     @Attribute(.externalStorage) var photoData: Data?
     var isDebugSample: Bool
@@ -164,6 +166,7 @@ final class Tasting {
         notes: String,
         photoData: Data? = nil,
         isDebugSample: Bool = false,
+        overallIsOverride: Bool = true,
         variety: Variety? = nil
     ) {
         self.id = id
@@ -173,10 +176,17 @@ final class Tasting {
         self.crunch = crunch
         self.juicy = juicy
         self.overall = overall
+        self.overallIsOverride = overallIsOverride
         self.notes = notes
         self.photoData = photoData
         self.isDebugSample = isDebugSample
         self.variety = variety
+    }
+
+    /// Manual overall when Chris set one. Otherwise the live average of the sliders.
+    var scoreForDisplay: Double {
+        if overallIsOverride { return overall }
+        return TasteScore.automatic(sweet: sweet, tart: tart, crunch: crunch, juicy: juicy)
     }
 }
 
@@ -394,7 +404,7 @@ extension Variety {
     func snapshot() -> TastingSnapshot? {
         guard let latest = latestTasting else { return nil }
         return TastingSnapshot(
-            overall: latest.overall,
+            overall: latest.scoreForDisplay,
             notes: latest.notes,
             sweet: latest.sweet,
             tart: latest.tart,

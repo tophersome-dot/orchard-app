@@ -151,7 +151,7 @@ struct CollectionScreen: View {
                 .lineLimit(2)
                 .minimumScaleFactor(0.7)
                 .multilineTextAlignment(.center)
-            if let score = variety.latestTasting?.overall {
+            if let score = variety.latestTasting?.scoreForDisplay {
                 Text(String(format: "%.1f", score))
                     .font(OrchardFont.title(12))
                     .foregroundStyle(OrchardColor.score(score))

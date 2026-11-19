@@ -129,9 +129,9 @@ struct VarietyDetailView: View {
     private func ratingBlock(_ tasting: Tasting, count: Int) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(String(format: "%.1f", tasting.overall))
+                Text(String(format: "%.1f", tasting.scoreForDisplay))
                     .font(OrchardFont.display(36))
-                    .foregroundStyle(OrchardColor.score(tasting.overall))
+                    .foregroundStyle(OrchardColor.score(tasting.scoreForDisplay))
                 Text(count == 1 ? "latest taste" : "latest of \(count)")
                     .font(OrchardFont.caption(13))
                     .foregroundStyle(OrchardColor.ink.opacity(0.6))
@@ -254,9 +254,9 @@ struct VarietyDetailView: View {
                     Text(tasting.tastedAt.formatted(date: .abbreviated, time: .omitted))
                         .font(OrchardFont.title(14))
                     Spacer()
-                    Text(String(format: "%.1f", tasting.overall))
+                    Text(String(format: "%.1f", tasting.scoreForDisplay))
                         .font(OrchardFont.title(16))
-                        .foregroundStyle(OrchardColor.score(tasting.overall))
+                        .foregroundStyle(OrchardColor.score(tasting.scoreForDisplay))
                 }
                 if !tasting.notes.isEmpty {
                     Text(tasting.notes)

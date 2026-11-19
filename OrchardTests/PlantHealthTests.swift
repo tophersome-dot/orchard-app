@@ -36,4 +36,12 @@ final class PlantHealthTests: XCTestCase {
         XCTAssertEqual(PlantHealth.from(rating: 0).condition, PlantHealth.from(rating: 1).condition)
         XCTAssertEqual(PlantHealth.from(rating: 9).scale, PlantHealth.from(rating: 5).scale)
     }
+
+    func testAutomaticOverallAveragesAllFourSlidersOntoHalfSteps() {
+        XCTAssertEqual(TasteScore.automatic(sweet: 3, tart: 3, crunch: 3, juicy: 3), 3)
+        XCTAssertEqual(TasteScore.automatic(sweet: 5, tart: 5, crunch: 5, juicy: 5), 5)
+        XCTAssertEqual(TasteScore.automatic(sweet: 0, tart: 0, crunch: 0, juicy: 0), 1)
+        XCTAssertEqual(TasteScore.automatic(sweet: 3.5, tart: 3.5, crunch: 3.5, juicy: 2.5), 3.5)
+        XCTAssertEqual(TasteScore.automatic(sweet: 4, tart: 4, crunch: 4, juicy: 3), 4)
+    }
 }

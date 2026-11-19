@@ -1,5 +1,16 @@
 import Foundation
 
+/// Turns the taste sliders into the half-step overall the apple picker uses.
+enum TasteScore {
+    /// Sweet, tart, crunch and juicy are the same kind of control: 0–5, step 0.5.
+    /// None is marked as a quality score rather than an intensity, so all four count.
+    static func automatic(sweet: Double, tart: Double, crunch: Double, juicy: Double) -> Double {
+        let average = (sweet + tart + crunch + juicy) / 4
+        let half = (average * 2).rounded() / 2
+        return min(5, max(1, half))
+    }
+}
+
 enum TraitSummary {
     static func glance(notes: String, sweet: Double, tart: Double, crunch: Double, juicy: Double) -> String {
         let line = notes
