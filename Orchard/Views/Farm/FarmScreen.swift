@@ -1135,8 +1135,8 @@ struct FarmScreen: View {
             FarmSprite.pathTexture, FarmSprite.pathEdge, FarmSprite.terrainDirt, FarmSprite.terrainSand,
             FarmSprite.terrainLonggrass, FarmSprite.terrainTilled, FarmSprite.edgeDirt, FarmSprite.edgeSand,
             FarmSprite.edgeLonggrass, FarmSprite.edgeBed, FarmSprite.terrainForest, FarmSprite.edgeForest,
-            FarmSprite.waterOcean, FarmSprite.waterLake, FarmSprite.edgeFoam, FarmSprite.edgeBankGrass, FarmSprite.edgeBankSand,
-            "cliff_face_sw", "cliff_face_se", "cliff_corner_s", "wooden_bridge_ne", "wooden_bridge_nw",
+            FarmSprite.waterOcean, FarmSprite.waterLake,
+            "wooden_bridge_ne", "wooden_bridge_nw",
             FarmSprite.fencePost, FarmSprite.fenceRailNE, FarmSprite.fenceRailNW,
             FarmSprite.house(HouseRules.progress(for: tastedCount).tier)
         ]

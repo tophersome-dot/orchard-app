@@ -59,7 +59,41 @@ enum ShoreOutline {
         return chaikin(second, passes: 2, weight: 0.25)
     }
 
-    /// Fewer points, for textured bands. The clip path keeps the full rounded loop.
+    /// Pushes the outline outward by a low-frequency wave, about 0.3–0.8 tiles.
+    /// The shift is always away from the loop's centre, so the land cells stay inside.
+    static func wobble(_ points: [CGPoint], seed: UInt64, minTiles: CGFloat = 0.3, maxTiles: CGFloat = 0.8) -> [CGPoint] {
+        let sampled = sample(points, spacing: 16)
+        guard sampled.count >= 3 else { return points }
+        let count = CGFloat(sampled.count)
+        let middle = CGPoint(
+            x: sampled.reduce(CGFloat(0)) { $0 + $1.x } / count,
+            y: sampled.reduce(CGFloat(0)) { $0 + $1.y } / count
+        )
+        let tile = hypot(IsoMap.tileWidth / 2, IsoMap.tileHeight / 2)
+        var pushed: [CGPoint] = []
+        pushed.reserveCapacity(sampled.count)
+        for (index, point) in sampled.enumerated() {
+            let previous = sampled[(index + sampled.count - 1) % sampled.count]
+            let following = sampled[(index + 1) % sampled.count]
+            let dx = following.x - previous.x
+            let dy = following.y - previous.y
+            let length = max(hypot(dx, dy), 0.001)
+            var outward = CGPoint(x: dy / length, y: -dx / length)
+            let away = CGPoint(x: point.x - middle.x, y: point.y - middle.y)
+            if outward.x * away.x + outward.y * away.y < 0 {
+                outward = CGPoint(x: -outward.x, y: -outward.y)
+            }
+            let turn = Double(index) / Double(sampled.count)
+            let slow = sin(turn * .pi * 2 * 4 + Double(seed % 997) * 0.01)
+            let slower = sin(turn * .pi * 2 * 7 + Double((seed / 13) % 991) * 0.017)
+            let unit = min(1, max(0, 0.5 + 0.34 * slow + 0.16 * slower))
+            let distance = (minTiles + (maxTiles - minTiles) * CGFloat(unit)) * tile
+            pushed.append(CGPoint(x: point.x + outward.x * distance, y: point.y + outward.y * distance))
+        }
+        return chaikin(pushed, passes: 1, weight: 0.25)
+    }
+
+    /// Fewer points, for a continuous stroke. The clip path keeps the full rounded loop.
     static func sample(_ points: [CGPoint], spacing: CGFloat) -> [CGPoint] {
         guard points.count >= 3, spacing > 1 else { return points }
         var result: [CGPoint] = [points[0]]

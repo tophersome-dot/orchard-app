@@ -104,6 +104,21 @@ final class WoodlandTests: XCTestCase {
         XCTAssertNil(DebugLaunch.positiveInt("-seedSampleTastings"))
     }
 
+    func testCoastWobbleStaysOutsideTheCells() {
+        let square = [
+            CGPoint(x: 0, y: 0),
+            CGPoint(x: 200, y: 0),
+            CGPoint(x: 200, y: 200),
+            CGPoint(x: 0, y: 200)
+        ]
+        let wobbled = ShoreOutline.wobble(ShoreOutline.round(square), seed: 11)
+        XCTAssertGreaterThan(wobbled.count, square.count)
+        for point in wobbled {
+            let distance = hypot(point.x - 100, point.y - 100)
+            XCTAssertGreaterThan(distance, 100)
+        }
+    }
+
     func testCoastChamferRemovesTheSquareCorner() {
         let square = [
             CGPoint(x: 0, y: 0),

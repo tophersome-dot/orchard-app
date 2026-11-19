@@ -59,11 +59,14 @@ struct FarmMapView: View {
             grass
             Canvas { context, size in
                 drawTerrains(in: context, size: size)
-                drawBanks(in: context, size: size)
             }
             .allowsHitTesting(false)
-            Canvas { context, size in
-                drawSmoothedShore(in: context, size: size)
+            TimelineView(.animation(minimumInterval: UIAccessibility.isReduceMotionEnabled ? 10 : 0.05, paused: UIAccessibility.isReduceMotionEnabled)) { timeline in
+                Canvas { context, size in
+                    let time = timeline.date.timeIntervalSinceReferenceDate
+                    drawProceduralShore(in: context, size: size, time: time)
+                    drawProceduralBanks(in: context, size: size)
+                }
             }
             .allowsHitTesting(false)
             if showsGrid {
@@ -117,7 +120,7 @@ struct FarmMapView: View {
             let origin = camera.screenPoint(.zero, in: size)
             let resolved = context.resolve(Image(FarmSprite.grass))
             context.drawLayer { layer in
-                layer.clip(to: ground, style: FillStyle(eoFill: false))
+                layer.clip(to: ground, style: FillStyle(eoFill: true))
                 let bleed: CGFloat = 2
                 let firstColumn = Int(floor((0 - origin.x) / pitch)) - 1
                 let lastColumn = Int(ceil((size.width - origin.x) / pitch)) + 1
@@ -695,20 +698,13 @@ struct FarmMapView: View {
                 shadeWaterDepth(loop, in: &layer, size: size)
             }
         }
-        let grassBank = context.resolve(Image(FarmSprite.edgeBankGrass))
-        let sandBank = context.resolve(Image(FarmSprite.edgeBankSand))
-        let band = IsoMap.tileWidth * 0.28 * camera.scale
-        for (index, loop) in loops.enumerated() {
-            let screen = ShoreOutline.sample(loop, spacing: 20).map { camera.screenPoint($0, in: size) }
-            let image = index.isMultiple(of: 3) ? sandBank : grassBank
-            drawTexturedBand(image, along: screen, width: band, in: context, canvas: size, fade: true, towardCenter: true)
-        }
     }
 
     private func smoothedWaterLoops() -> [[CGPoint]] {
-        let key = "water-\(chart.lakes.count)-\(chart.creek.count)"
+        let key = "water-\(chart.lakes.count)-\(chart.creek.count)-\(shoreSeed)"
         if shoreCache.waterKey == key { return shoreCache.water }
-        let loops = boundaryLoops(of: chart.lakes.union(chart.creek)).map { ShoreOutline.round($0) }
+        let rounded = boundaryLoops(of: chart.lakes.union(chart.creek)).map { ShoreOutline.round($0) }
+        let loops = rounded.map { ShoreOutline.wobble($0, seed: shoreSeed &+ 19, minTiles: 0.12, maxTiles: 0.35) }
         shoreCache.waterKey = key
         shoreCache.water = loops
         return loops
@@ -759,124 +755,161 @@ struct FarmMapView: View {
         }
     }
 
-    private func drawSmoothedShore(in context: GraphicsContext, size: CGSize) {
-        let loops = smoothedCoastLoops()
-        guard !loops.isEmpty else { return }
-        let cliff = context.resolve(Image("cliff_face_sw"))
-        let foam = context.resolve(Image(FarmSprite.edgeFoam))
-        let cliffWidth = IsoMap.tileWidth * 0.42 * camera.scale
-        let foamWidth = IsoMap.tileWidth * 0.25 * camera.scale
-        for loop in loops {
-            let screen = ShoreOutline.sample(loop, spacing: 22).map { camera.screenPoint($0, in: size) }
-            drawTexturedBand(cliff, along: screen, width: cliffWidth, in: context, canvas: size)
-            drawTexturedBand(foam, along: screen, width: foamWidth, in: context, canvas: size)
+    /// One continuous shore. Cached in world space; only the foam offset moves each frame.
+    private func drawProceduralShore(in context: GraphicsContext, size: CGSize, time: TimeInterval) {
+        let reduce = UIAccessibility.isReduceMotionEnabled
+        let tile = IsoMap.tileWidth * camera.scale
+        let view = CGRect(origin: .zero, size: size).insetBy(dx: -tile, dy: -tile * 0.8)
+        for world in smoothedCoastLoops() {
+            let screen = world.map { camera.screenPoint($0, in: size) }
+            guard loopIntersects(screen, view) else { continue }
+            let center = loopCenter(screen)
+            drawShallowWater(screen, center: center, width: tile * 0.85, in: context)
+            drawFoamLines(screen, center: center, tile: tile, time: time, reduceMotion: reduce, in: context, view: view)
+            drawCliffAndBeach(screen, center: center, tile: tile, in: context, view: view)
+            context.stroke(closedPath(screen), with: .color(Color(red: 0.86, green: 0.95, blue: 0.62).opacity(0.9)), lineWidth: 2)
         }
     }
 
-    /// A soft strip centered on the outline, hanging toward the water.
-    private func drawTexturedBand(
-        _ image: GraphicsContext.ResolvedImage,
-        along points: [CGPoint],
-        width: CGFloat,
+    /// Soft bank and a shallow rim for lakes and the creek. No edge stamps.
+    private func drawProceduralBanks(in context: GraphicsContext, size: CGSize) {
+        let tile = IsoMap.tileWidth * camera.scale
+        let view = CGRect(origin: .zero, size: size).insetBy(dx: -tile, dy: -tile)
+        for world in smoothedWaterLoops() {
+            let screen = world.map { camera.screenPoint($0, in: size) }
+            guard loopIntersects(screen, view) else { continue }
+            let center = loopCenter(screen)
+            let bank = offsetLoop(screen, distance: tile * 0.28, from: center)
+            var band = closedPath(bank)
+            band.addPath(closedPath(screen))
+            let sandy = shoreSeed % 2 == 0
+            let color = sandy
+                ? Color(red: 0.86, green: 0.78, blue: 0.52).opacity(0.55)
+                : Color(red: 0.55, green: 0.72, blue: 0.34).opacity(0.45)
+            context.fill(band, with: .color(color), style: FillStyle(eoFill: true))
+            let rim = offsetLoop(screen, distance: -tile * 0.18, from: center)
+            context.stroke(closedPath(rim), with: .color(Color(red: 0.72, green: 0.9, blue: 0.86).opacity(0.55)), lineWidth: max(2, tile * 0.12))
+        }
+    }
+
+    private func drawShallowWater(_ loop: [CGPoint], center: CGPoint, width: CGFloat, in context: GraphicsContext) {
+        let outer = offsetLoop(loop, distance: width, from: center)
+        var band = closedPath(outer)
+        band.addPath(closedPath(loop))
+        context.fill(
+            band,
+            with: .color(Color(red: 0.45, green: 0.82, blue: 0.78).opacity(0.42)),
+            style: FillStyle(eoFill: true)
+        )
+    }
+
+    private func drawFoamLines(
+        _ loop: [CGPoint],
+        center: CGPoint,
+        tile: CGFloat,
+        time: TimeInterval,
+        reduceMotion: Bool,
         in context: GraphicsContext,
-        canvas size: CGSize,
-        fade: Bool = false,
-        towardCenter: Bool = false
+        view: CGRect
     ) {
-        guard points.count >= 2, width > 0.5 else { return }
-        let view = CGRect(origin: .zero, size: size).insetBy(dx: -width - 8, dy: -width - 8)
-        let center = points.reduce(CGPoint.zero) { CGPoint(x: $0.x + $1.x, y: $0.y + $1.y) }
-        let count = CGFloat(points.count)
-        let middle = CGPoint(x: center.x / count, y: center.y / count)
-        for index in points.indices {
-            let start = points[index]
-            let end = points[(index + 1) % points.count]
+        let pulse = reduceMotion ? 0 : CGFloat(sin(time * 1.4)) * tile * 0.05
+        let lines: [(CGFloat, Double, CGFloat)] = [
+            (0.22, 0.28, 2.2),
+            (0.46, 0.16, 1.4),
+            (0.68, 0.09, 1.0)
+        ]
+        for (index, line) in lines.enumerated() {
+            let shift = pulse * (index == 0 ? 1 : 0.45)
+            let offset = offsetLoop(loop, distance: tile * line.0 + shift, from: center)
+            guard loopIntersects(offset, view) else { continue }
+            context.stroke(closedPath(offset), with: .color(Color.white.opacity(line.1)), lineWidth: line.2)
+        }
+    }
+
+    /// Camera-facing edges drop as one sandstone band. Edges facing away get a short beach.
+    private func drawCliffAndBeach(_ loop: [CGPoint], center: CGPoint, tile: CGFloat, in context: GraphicsContext, view: CGRect) {
+        guard loop.count >= 3 else { return }
+        let drop = IsoMap.tileHeight * 0.5 * camera.scale
+        let cliff = Gradient(stops: [
+            .init(color: Color(red: 0.72, green: 0.58, blue: 0.38), location: 0),
+            .init(color: Color(red: 0.55, green: 0.40, blue: 0.24), location: 0.55),
+            .init(color: Color(red: 0.32, green: 0.24, blue: 0.16), location: 1)
+        ])
+        for index in loop.indices {
+            let start = loop[index]
+            let end = loop[(index + 1) % loop.count]
             let mid = CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2)
             guard view.contains(mid) else { continue }
-            let dx = end.x - start.x
-            let dy = end.y - start.y
-            let length = max(hypot(dx, dy), 0.001)
-            let along = CGPoint(x: dx / length, y: dy / length)
-            var outward = CGPoint(x: dy / length, y: -dx / length)
-            let inward = CGPoint(x: middle.x - mid.x, y: middle.y - mid.y)
-            let pointsInward = outward.x * inward.x + outward.y * inward.y > 0
-            if pointsInward != towardCenter {
-                outward = CGPoint(x: -outward.x, y: -outward.y)
-            }
-            let origin = CGPoint(x: start.x + outward.x * width, y: start.y + outward.y * width)
-            let transform = CGAffineTransform(a: along.x, b: along.y, c: -outward.x, d: -outward.y, tx: origin.x, ty: origin.y)
-            context.drawLayer { layer in
-                layer.concatenate(transform)
-                layer.draw(image, in: CGRect(x: 0, y: 0, width: length, height: width))
-                if fade {
-                    layer.blendMode = .destinationIn
-                    let fade = Gradient(stops: [
-                        .init(color: Color.white.opacity(0.05), location: 0),
-                        .init(color: Color.white.opacity(0.55), location: 0.45),
-                        .init(color: Color.white, location: 1)
-                    ])
-                    layer.fill(
-                        Path(CGRect(x: 0, y: 0, width: length, height: width)),
-                        with: .linearGradient(fade, startPoint: CGPoint(x: length / 2, y: 0), endPoint: CGPoint(x: length / 2, y: width))
-                    )
-                }
+            let normal = outwardNormal(from: start, to: end, awayFrom: center)
+            if normal.y >= -0.05 {
+                let down = CGPoint(x: 0, y: drop)
+                var face = Path()
+                face.move(to: start)
+                face.addLine(to: end)
+                face.addLine(to: CGPoint(x: end.x + down.x, y: end.y + down.y))
+                face.addLine(to: CGPoint(x: start.x + down.x, y: start.y + down.y))
+                face.closeSubpath()
+                context.fill(face, with: .linearGradient(cliff, startPoint: start, endPoint: CGPoint(x: start.x, y: start.y + drop)))
+            } else {
+                let reach = tile * 0.22
+                var sand = Path()
+                sand.move(to: start)
+                sand.addLine(to: end)
+                sand.addLine(to: CGPoint(x: end.x + normal.x * reach, y: end.y + normal.y * reach))
+                sand.addLine(to: CGPoint(x: start.x + normal.x * reach, y: start.y + normal.y * reach))
+                sand.closeSubpath()
+                context.fill(sand, with: .color(Color(red: 0.89, green: 0.82, blue: 0.58).opacity(0.85)))
             }
         }
     }
 
-    private func drawCliffs(in context: GraphicsContext, size: CGSize) {
-        let bounds = visibleTileBounds(in: size, margin: 3)
-        for tile in chart.ground where bounds.contains(tile) {
-            let south = FarmTile(column: tile.column, row: tile.row + 1)
-            let east = FarmTile(column: tile.column + 1, row: tile.row)
-            let facesSouth = isOcean(south)
-            let facesEast = isOcean(east)
-            let corners = IsoMap.corners(tile)
-            if facesSouth {
-                drawStamp(ShoreStamp.faceSW, at: corners[3], in: context, size: size)
-            }
-            if facesEast {
-                drawStamp(ShoreStamp.faceSE, at: corners[2], in: context, size: size)
-            }
-            if facesSouth && facesEast {
-                drawStamp(ShoreStamp.cornerS, at: corners[2], in: context, size: size)
-            }
+    private func loopIntersects(_ points: [CGPoint], _ view: CGRect) -> Bool {
+        guard let minX = points.map(\.x).min(), let maxX = points.map(\.x).max(),
+              let minY = points.map(\.y).min(), let maxY = points.map(\.y).max() else { return false }
+        return view.intersects(CGRect(x: minX, y: minY, width: max(maxX - minX, 1), height: max(maxY - minY, 1)))
+    }
+
+    private func loopCenter(_ points: [CGPoint]) -> CGPoint {
+        let count = CGFloat(points.count)
+        guard count > 0 else { return .zero }
+        return CGPoint(
+            x: points.reduce(CGFloat(0)) { $0 + $1.x } / count,
+            y: points.reduce(CGFloat(0)) { $0 + $1.y } / count
+        )
+    }
+
+    private func closedPath(_ points: [CGPoint]) -> Path {
+        var path = Path()
+        guard let first = points.first else { return path }
+        path.move(to: first)
+        for point in points.dropFirst() {
+            path.addLine(to: point)
+        }
+        path.closeSubpath()
+        return path
+    }
+
+    private func offsetLoop(_ points: [CGPoint], distance: CGFloat, from center: CGPoint) -> [CGPoint] {
+        guard points.count >= 3 else { return points }
+        return points.enumerated().map { index, point in
+            let previous = points[(index + points.count - 1) % points.count]
+            let following = points[(index + 1) % points.count]
+            let normal = outwardNormal(from: previous, to: following, awayFrom: center)
+            return CGPoint(x: point.x + normal.x * distance, y: point.y + normal.y * distance)
         }
     }
 
-    private func drawFoam(in context: GraphicsContext, size: CGSize) {
-        let resolved = context.resolve(Image(FarmSprite.edgeFoam))
-        let drop = ShoreStamp.waterDrop(camera: camera.scale)
-        let bounds = visibleTileBounds(in: size, margin: 2)
-        for tile in chart.ground where bounds.contains(tile) {
-            for neighbor in Woodland.orthogonal(tile) where isOcean(neighbor) {
-                guard let edge = gridEdge(from: tile, toward: neighbor) else { continue }
-                drawEdgeStrip(resolved, edge: edge, owner: tile, kind: .path, in: context, size: size, drop: drop, fades: false, fraction: 0.25)
-            }
+    private func outwardNormal(from start: CGPoint, to end: CGPoint, awayFrom center: CGPoint) -> CGPoint {
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let length = max(hypot(dx, dy), 0.001)
+        var normal = CGPoint(x: dy / length, y: -dx / length)
+        let mid = CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2)
+        let away = CGPoint(x: mid.x - center.x, y: mid.y - center.y)
+        if normal.x * away.x + normal.y * away.y < 0 {
+            normal = CGPoint(x: -normal.x, y: -normal.y)
         }
-    }
-
-    private func drawBanks(in context: GraphicsContext, size: CGSize) {
-        let grassImage = context.resolve(Image(FarmSprite.edgeBankGrass))
-        let sandImage = context.resolve(Image(FarmSprite.edgeBankSand))
-        let bounds = visibleTileBounds(in: size, margin: 2)
-        let water = chart.water
-        for tile in chart.ground where bounds.contains(tile) {
-            for neighbor in Woodland.orthogonal(tile) where water.contains(neighbor) {
-                guard let edge = gridEdge(from: tile, toward: neighbor) else { continue }
-                let image = Woodland.bankIsSand(seed: shoreSeed, edge: edge) ? sandImage : grassImage
-                drawEdgeStrip(image, edge: edge, owner: tile, kind: .path, in: context, size: size, fades: false, fraction: 0.22)
-            }
-        }
-    }
-
-    private func drawStamp(_ stamp: DecorSprite, at world: CGPoint, in context: GraphicsContext, size: CGSize) {
-        let scale = ShoreStamp.pixelScale(camera.scale)
-        let display = CGSize(width: stamp.size.width * scale, height: stamp.size.height * scale)
-        let anchor = CGPoint(x: stamp.anchor.x * scale, y: stamp.anchor.y * scale)
-        let screen = camera.screenPoint(world, in: size)
-        let rect = CGRect(x: screen.x - anchor.x, y: screen.y - anchor.y, width: display.width, height: display.height)
-        context.draw(context.resolve(Image(stamp.name)), in: rect)
+        return normal
     }
 
     private func decorBelongsOnIsland(_ tile: FarmTile) -> Bool {
@@ -910,9 +943,14 @@ struct FarmMapView: View {
     }
 
     private func smoothedLandLoops() -> [[CGPoint]] {
-        let key = "land-\(chart.ground.count)-\(chart.lakes.count)-\(chart.creek.count)"
+        let key = "land-\(chart.ground.count)-\(chart.lakes.count)-\(chart.creek.count)-\(shoreSeed)"
         if shoreCache.landKey == key { return shoreCache.land }
-        let loops = boundaryLoops(of: chart.ground).map { ShoreOutline.round($0) }
+        let coast = smoothedCoastLoops()
+        let coastArea = coast.map { abs(polygonArea($0)) }.max() ?? 0
+        let holes = boundaryLoops(of: chart.ground)
+            .map { ShoreOutline.round($0) }
+            .filter { abs(polygonArea($0)) < coastArea * 0.5 }
+        let loops = coast + holes
         shoreCache.landKey = key
         shoreCache.land = loops
         return loops
@@ -922,13 +960,34 @@ struct FarmMapView: View {
         let mass = chart.ground.union(chart.water)
         let columns = mass.map(\.column)
         let rows = mass.map(\.row)
-        let key = "coast-\(mass.count)-\(columns.min() ?? 0)-\(columns.max() ?? 0)-\(rows.min() ?? 0)-\(rows.max() ?? 0)"
+        let key = "coast-\(mass.count)-\(columns.min() ?? 0)-\(columns.max() ?? 0)-\(rows.min() ?? 0)-\(rows.max() ?? 0)-\(shoreSeed)"
         if shoreCache.coastKey == key { return shoreCache.coast }
-        let loops = boundaryLoops(of: mass).map { ShoreOutline.round($0) }
+        let loops = wavyOuterLoop(boundaryLoops(of: mass))
         shoreCache.coastKey = key
         shoreCache.coast = loops
         OrchardTiming.log("coast loops \(loops.count) points \(loops.first?.count ?? 0) ground \(mass.count)")
         return loops
+    }
+
+    /// The largest ring is the outside of the island and gets the wavy coast. Holes stay smooth.
+    private func wavyOuterLoop(_ raw: [[CGPoint]]) -> [[CGPoint]] {
+        let rounded = raw.map { ShoreOutline.round($0) }
+        guard let outer = rounded.indices.max(by: { abs(polygonArea(rounded[$0])) < abs(polygonArea(rounded[$1])) }) else {
+            return []
+        }
+        return rounded.enumerated().map { index, loop in
+            index == outer ? ShoreOutline.wobble(loop, seed: shoreSeed) : loop
+        }
+    }
+
+    private func polygonArea(_ points: [CGPoint]) -> CGFloat {
+        guard points.count >= 3 else { return 0 }
+        var sum: CGFloat = 0
+        for index in points.indices {
+            let next = points[(index + 1) % points.count]
+            sum += points[index].x * next.y - next.x * points[index].y
+        }
+        return sum * 0.5
     }
 
     private func drawTerrains(in context: GraphicsContext, size: CGSize) {

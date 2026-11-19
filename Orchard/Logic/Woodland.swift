@@ -136,7 +136,7 @@ enum Woodland {
     static let radiusGrowth: Double = 2
     static let radiusCap: Double = 50
     /// Bump when grove, water, or patch generation changes so existing saves rebuild.
-    static let generatorVersion = 8
+    static let generatorVersion = 9
 
     static func level(tastedCount: Int) -> Int {
         LaunchOverrides.shared.resolvedLevel(tastedCount: tastedCount)
