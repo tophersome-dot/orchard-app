@@ -12,8 +12,18 @@ enum FarmItemKind: String, Equatable, CaseIterable {
     case plant
     case fence
     case path
+    case dirt
+    case sand
+    case longgrass
     case bush
     case rock
+
+    var isTerrain: Bool {
+        switch self {
+        case .path, .dirt, .sand, .longgrass: true
+        case .house, .tractor, .plant, .fence, .bush, .rock: false
+        }
+    }
 }
 
 struct FarmRecord: Equatable, Identifiable {
@@ -133,7 +143,7 @@ enum FarmExpansion {
         }
 
         var fences: [FarmFenceSegment] = []
-        let gate: Set<Int> = [3, 4, 5]
+        let gate: Set<Int> = [4]
         for column in 0...8 {
             fences.append(FarmFenceSegment(tile: FarmTile(column: column, row: 0), alongColumn: false))
             if !gate.contains(column) {
@@ -311,7 +321,7 @@ enum FarmExpansion {
             guard let spot else { return false }
             let tiles = plan.map { spots(kind: spot, plan: $0) } ?? spots(kind: spot, tastedCount: tastedCount)
             return tiles.contains(tile)
-        case .tractor, .fence, .path, .bush, .rock:
+        case .tractor, .fence, .path, .dirt, .sand, .longgrass, .bush, .rock:
             return true
         case .house:
             return true

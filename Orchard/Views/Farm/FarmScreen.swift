@@ -1,10 +1,35 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
-private enum FarmTool: String, CaseIterable {
-    case move = "Move"
-    case fence = "Fence"
-    case path = "Path"
+private enum FarmTool: Hashable {
+    case move
+    case paint(FarmItemKind?)
+
+    static let palette: [FarmTool] = [
+        .move,
+        .paint(.path),
+        .paint(.dirt),
+        .paint(.sand),
+        .paint(.longgrass),
+        .paint(nil)
+    ]
+
+    var isBrush: Bool {
+        if case .move = self { return false }
+        return true
+    }
+
+    var iconName: String? {
+        switch self {
+        case .move: nil
+        case .paint(.dirt): "icon_terrain_dirt"
+        case .paint(.sand): "icon_terrain_sand"
+        case .paint(.longgrass): "icon_terrain_longgrass"
+        case .paint(.path): "icon_terrain_path"
+        case .paint: "icon_terrain_grass"
+        }
+    }
 }
 
 private enum MapGesture {
@@ -21,6 +46,7 @@ struct FarmScreen: View {
     @State private var previewStarter = FarmExpansion.starterRecords()
     @State private var editing = false
     @State private var tool: FarmTool = .move
+    @State private var paintStroke: [FarmTile: FarmItemKind?] = [:]
     @State private var undo: [[FarmRecord]] = []
     @State private var scale: CGFloat = 1
     @State private var lastScale: CGFloat = 1
@@ -98,13 +124,40 @@ struct FarmScreen: View {
                     showsNames: scale >= 1.25,
                     detailed: scenery,
                     camera: resolvedCamera(in: geo.size),
-                    canvasSize: geo.size
+                    canvasSize: geo.size,
+                    terrain: displayTerrain,
+                    hoverTiles: hoverFootprint
                 )
+                if tool.isBrush {
+                    MapBrushOverlay(
+                        onPaint: { from, to in paint(from: from, to: to, in: geo.size) },
+                        onPaintEnd: { commitPaint() },
+                        onPan: { translation, state in
+                            userMoved = true
+                            if state == .changed {
+                                offset = CGSize(width: lastOffset.width + translation.width, height: lastOffset.height + translation.height)
+                            } else if state == .ended || state == .cancelled {
+                                lastOffset = offset
+                            }
+                        },
+                        onPinch: { magnification, state in
+                            userMoved = true
+                            if state == .changed {
+                                scale = min(1.7, max(0.32, lastScale * magnification))
+                            } else if state == .ended || state == .cancelled {
+                                lastScale = scale
+                            }
+                        }
+                    )
+                }
             }
             .contentShape(Rectangle())
             .gesture(drag(in: geo.size))
             .simultaneousGesture(pinch)
-            .onAppear { frameHouse(in: geo.size) }
+            .onAppear {
+                frameHouse(in: geo.size)
+                if DebugLaunch.demoTerrain { editing = true }
+            }
             .onChange(of: frameRequest) { _, _ in frameHouse(in: geo.size) }
         }
         .overlay(alignment: .top) { topBar }
@@ -132,6 +185,27 @@ struct FarmScreen: View {
                 frameRequest += 1
             }
         }
+    }
+
+    private var displayTerrain: [FarmTile: FarmItemKind] {
+        var map: [FarmTile: FarmItemKind] = [:]
+        for record in displayRecords where record.kind.isTerrain {
+            map[record.tile] = record.kind
+        }
+        for (tile, painted) in paintStroke {
+            if let painted {
+                map[tile] = painted
+            } else {
+                map.removeValue(forKey: tile)
+            }
+        }
+        return map
+    }
+
+    private var hoverFootprint: [FarmTile] {
+        guard let hover else { return [] }
+        guard let dragging, let record = records.first(where: { $0.id == dragging }) else { return [hover] }
+        return FarmExpansion.footprint(kind: record.kind, anchor: hover)
     }
 
     private var displayRecords: [FarmRecord] {
@@ -178,24 +252,49 @@ struct FarmScreen: View {
     @ViewBuilder
     private var editBar: some View {
         if editing {
-            HStack(spacing: 8) {
-                ForEach(FarmTool.allCases, id: \.self) { item in
-                    Button(item.rawValue) { tool = item }
-                        .font(.system(size: 14, weight: tool == item ? .semibold : .regular))
-                        .foregroundStyle(tool == item ? OrchardColor.grassDeep : OrchardColor.ink)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(FarmTool.palette, id: \.self) { item in
+                        Button {
+                            tool = item
+                            clearGesture()
+                        } label: {
+                            toolLabel(item)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Button("Undo") { undoLast() }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(undo.isEmpty ? Color.secondary : OrchardColor.ink)
+                        .disabled(undo.isEmpty)
                 }
-                Button("Undo") { undoLast() }
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(undo.isEmpty ? Color.secondary : OrchardColor.ink)
-                    .disabled(undo.isEmpty)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.ultraThinMaterial, in: Capsule())
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: Capsule())
             .padding(.bottom, 8)
         }
+    }
+
+    @ViewBuilder
+    private func toolLabel(_ item: FarmTool) -> some View {
+        let selected = tool == item
+        Group {
+            if item == .move {
+                Text("Move")
+                    .font(.system(size: 14, weight: selected ? .semibold : .regular))
+                    .foregroundStyle(selected ? OrchardColor.grassDeep : OrchardColor.ink)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+            } else if let icon = item.iconName {
+                Image(icon)
+                    .resizable()
+                    .interpolation(.medium)
+                    .frame(width: 36, height: 36)
+                    .padding(2)
+            }
+        }
+        .background(selected ? Color.white.opacity(0.7) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func drag(in viewSize: CGSize) -> some Gesture {
@@ -219,7 +318,12 @@ struct FarmScreen: View {
                     )
                 case .moveItem:
                     let tile = tile(at: value.location, in: viewSize)
-                    hover = tile
+                    if tile != hover {
+                        if hover != nil {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        }
+                        hover = tile
+                    }
                     hoverValid = placementValid(tile)
                 case .place, .undecided:
                     break
@@ -284,8 +388,11 @@ struct FarmScreen: View {
 
     private func spritesToWarm() -> [String] {
         var names = [
-            FarmSprite.grass, FarmSprite.fence, FarmSprite.tractor, FarmSprite.bush, FarmSprite.rock,
-            FarmSprite.sapling, FarmSprite.soilTree, FarmSprite.soilVine, FarmSprite.emptyBed, FarmSprite.stonePath,
+            FarmSprite.grass, FarmSprite.tractor, FarmSprite.bush, FarmSprite.rock,
+            FarmSprite.sapling, FarmSprite.soilTree, FarmSprite.soilVine, FarmSprite.emptyBed,
+            FarmSprite.pathTexture, FarmSprite.pathEdge, FarmSprite.terrainDirt, FarmSprite.terrainSand,
+            FarmSprite.terrainLonggrass, FarmSprite.edgeDirt, FarmSprite.edgeSand, FarmSprite.edgeLonggrass,
+            FarmSprite.fencePost, FarmSprite.fenceRailNE, FarmSprite.fenceRailNW,
             FarmSprite.house(HouseRules.progress(for: tastedCount).tier)
         ]
         for variety in varieties where variety.isTried {
@@ -310,7 +417,10 @@ struct FarmScreen: View {
 
     private func placementValid(_ tile: FarmTile) -> Bool {
         guard let dragging, let record = records.first(where: { $0.id == dragging }) else { return false }
-        var occupied = Set(records.map(\.tile))
+        if record.kind.isTerrain {
+            return !records.contains { $0.id != record.id && $0.kind.isTerrain && $0.tile == tile }
+        }
+        var occupied = Set(records.filter { !$0.kind.isTerrain }.map(\.tile))
         occupied.remove(record.tile)
         let spot = record.varietyID.flatMap { plants[$0] }.map { FarmExpansion.spotKind(zone: $0.zone) }
         let reserved = FarmExpansion.reservedTiles(in: records, ignoring: record.id)
@@ -323,6 +433,41 @@ struct FarmScreen: View {
             reserved: reserved,
             plan: yardPlan
         )
+    }
+
+    private func paint(from: CGPoint, to: CGPoint, in viewSize: CGSize) {
+        let start = tile(at: from, in: viewSize)
+        let end = tile(at: to, in: viewSize)
+        let steps = max(abs(end.column - start.column), abs(end.row - start.row))
+        var last: FarmTile?
+        for index in 0...steps {
+            let column = steps == 0 ? end.column : start.column + (end.column - start.column) * index / steps
+            let row = steps == 0 ? end.row : start.row + (end.row - start.row) * index / steps
+            let painted = FarmTile(column: column, row: row)
+            if painted != last {
+                if last != nil {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }
+                if case .paint(let kind) = tool {
+                    paintStroke[painted] = kind
+                }
+                last = painted
+            }
+        }
+    }
+
+    private func commitPaint() {
+        guard !paintStroke.isEmpty else { return }
+        let stroke = paintStroke
+        paintStroke = [:]
+        commit { records in
+            for (tile, kind) in stroke {
+                records.removeAll { $0.kind.isTerrain && $0.tile == tile }
+                if let kind {
+                    records.append(FarmRecord(id: UUID(), kind: kind, varietyID: nil, tile: tile))
+                }
+            }
+        }
     }
 
     private func placeTool(at tile: FarmTile) {
@@ -372,5 +517,72 @@ struct FarmScreen: View {
         worldCenter = fitted.center
         offset = .zero
         lastOffset = .zero
+    }
+}
+
+private struct MapBrushOverlay: UIViewRepresentable {
+    var onPaint: (CGPoint, CGPoint) -> Void
+    var onPaintEnd: () -> Void
+    var onPan: (CGSize, UIGestureRecognizer.State) -> Void
+    var onPinch: (CGFloat, UIGestureRecognizer.State) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .clear
+        view.isMultipleTouchEnabled = true
+        let paint = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.paint(_:)))
+        paint.minimumNumberOfTouches = 1
+        paint.maximumNumberOfTouches = 1
+        let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.pan(_:)))
+        pan.minimumNumberOfTouches = 2
+        pan.maximumNumberOfTouches = 2
+        let pinch = UIPinchGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.pinch(_:)))
+        view.addGestureRecognizer(paint)
+        view.addGestureRecognizer(pan)
+        view.addGestureRecognizer(pinch)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.parent = self
+    }
+
+    final class Coordinator: NSObject {
+        var parent: MapBrushOverlay
+        var lastPaint: CGPoint?
+
+        init(_ parent: MapBrushOverlay) {
+            self.parent = parent
+        }
+
+        @objc func paint(_ gesture: UIPanGestureRecognizer) {
+            let point = gesture.location(in: gesture.view)
+            switch gesture.state {
+            case .began:
+                lastPaint = point
+                parent.onPaint(point, point)
+            case .changed:
+                let start = lastPaint ?? point
+                parent.onPaint(start, point)
+                lastPaint = point
+            case .ended, .cancelled, .failed:
+                parent.onPaintEnd()
+                lastPaint = nil
+            default:
+                break
+            }
+        }
+
+        @objc func pan(_ gesture: UIPanGestureRecognizer) {
+            parent.onPan(gesture.translation(in: gesture.view), gesture.state)
+        }
+
+        @objc func pinch(_ gesture: UIPinchGestureRecognizer) {
+            parent.onPinch(gesture.scale, gesture.state)
+        }
     }
 }

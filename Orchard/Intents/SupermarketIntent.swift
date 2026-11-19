@@ -19,7 +19,9 @@ struct OrchardShortcuts: AppShortcutsProvider {
             intent: OpenSupermarketIntent(),
             phrases: [
                 "Open supermarket mode in \(.applicationName)"
-            ]
+            ],
+            shortTitle: LocalizedStringResource("Supermarket"),
+            systemImage: "basket.fill"
         )
     }
 }

@@ -58,6 +58,8 @@ xcrun simctl launch booted com.chrismartin.orchard -seedSampleTastings -openScre
 
 `-farmZoom 0.45` overrides the opening camera scale. `1` means one tile is 84 points wide. Omit it and the yard is framed to about 90% of the screen width.
 
+`-demoTerrain` paints a few dirt, sand, and long-grass cells beside the yard and opens Edit, so the terrain palette is on screen.
+
 `-openScreen` accepts `farm`, `taste`, `shop` (or `supermarket`), and `collection`.
 
 `-seedSampleTastings` inserts fictional tastings for varieties that have none, so the farm, supermarket list, and collection have something to screenshot. They are not a real tasting notebook. Delete them from a variety card if you want them gone. A variety you have already tasted is left alone.
@@ -119,7 +121,10 @@ The approved sprite pack is in `Assets.xcassets`, one universal imageset per nam
 | `bed_empty` | An empty soil bed |
 | `bed_<varietyId>` | A planted bed, for example `bed_dutch-carrot` |
 | `vine_<varietyId>` | A trellis or greenhouse crop, for example `vine_cherry-tomato` |
-| `fence_picket_straight` | Picket fence |
+| `path_texture`, `terrain_dirt`, `terrain_sand`, `terrain_longgrass` | Continuous ground, warped into the iso grid |
+| `path_edge_texture`, `edge_dirt`, `edge_sand`, `edge_longgrass` | Fringe on a terrain boundary |
+| `fence_post`, `fence_rail_ne`, `fence_rail_nw` | Fence posts and the two rail directions |
+| `icon_terrain_*` | Edit-mode terrain palette |
 | `tractor` | Tractor |
 | `bush` | Scrub |
 | `rock` | Scrub |

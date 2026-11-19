@@ -13,6 +13,17 @@ enum FarmSprite {
     static let soilVine = "soil_vine"
     static let grass = "ground_grass"
     static let grassDark = "ground_grass_dark"
+    static let pathTexture = "path_texture"
+    static let pathEdge = "path_edge_texture"
+    static let terrainDirt = "terrain_dirt"
+    static let terrainSand = "terrain_sand"
+    static let terrainLonggrass = "terrain_longgrass"
+    static let edgeDirt = "edge_dirt"
+    static let edgeSand = "edge_sand"
+    static let edgeLonggrass = "edge_longgrass"
+    static let fencePost = "fence_post"
+    static let fenceRailNE = "fence_rail_ne"
+    static let fenceRailNW = "fence_rail_nw"
     static let stonePath = "path_stone"
     static let fence = "fence_picket_straight"
     static let tractor = "tractor"
@@ -40,6 +51,26 @@ enum FarmSprite {
     static func bed(varietyID: String) -> String { "bed_\(varietyID)" }
     static func vine(varietyID: String) -> String { "vine_\(varietyID)" }
     static func fruit(varietyID: String) -> String { "fruit_\(varietyID)" }
+
+    static func terrainFill(_ kind: FarmItemKind) -> String? {
+        switch kind {
+        case .path: pathTexture
+        case .dirt: terrainDirt
+        case .sand: terrainSand
+        case .longgrass: terrainLonggrass
+        default: nil
+        }
+    }
+
+    static func terrainEdge(_ kind: FarmItemKind) -> String? {
+        switch kind {
+        case .path: pathEdge
+        case .dirt: edgeDirt
+        case .sand: edgeSand
+        case .longgrass: edgeLonggrass
+        default: nil
+        }
+    }
 
     static func image(named name: String) -> UIImage? {
         spriteLock.lock()

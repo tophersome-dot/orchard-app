@@ -1,6 +1,14 @@
 import Foundation
 
 enum DebugLaunch {
+    static var demoTerrain: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-demoTerrain")
+        #else
+        false
+        #endif
+    }
+
     static var seedSampleTastings: Bool {
         #if DEBUG
         ProcessInfo.processInfo.arguments.contains("-seedSampleTastings")

@@ -1,0 +1,12 @@
+{
+  "images": [
+    {
+      "filename": "icon_terrain_dirt.png",
+      "idiom": "universal"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
+}

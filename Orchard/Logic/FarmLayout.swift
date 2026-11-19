@@ -10,8 +10,38 @@ enum FarmLayout {
         let records = existing.map(\.record)
         let tastedCount = Set(tried.map(\.id)).count
         let next = FarmExpansion.reconciled(records, tried: tried, tastedCount: tastedCount)
-        guard next != records else { return }
-        try write(next, replacing: existing, in: context)
+        if next != records {
+            try write(next, replacing: existing, in: context)
+        }
+        if DebugLaunch.demoTerrain {
+            try ensureDemoTerrain(in: context)
+        }
+    }
+
+    /// A few painted cells beside the yard, for screenshots of edit mode.
+    @MainActor
+    private static func ensureDemoTerrain(in context: ModelContext) throws {
+        let existing = try context.fetch(FetchDescriptor<FarmPlacement>())
+        let occupied = Set(existing.filter { $0.record.kind.isTerrain }.map { FarmTile(column: $0.column, row: $0.row) })
+        let samples: [(FarmItemKind, FarmTile)] = [
+            (.dirt, FarmTile(column: 11, row: 9)),
+            (.dirt, FarmTile(column: 12, row: 9)),
+            (.dirt, FarmTile(column: 12, row: 10)),
+            (.sand, FarmTile(column: 15, row: 8)),
+            (.sand, FarmTile(column: 16, row: 8)),
+            (.sand, FarmTile(column: 15, row: 9)),
+            (.longgrass, FarmTile(column: 9, row: 12)),
+            (.longgrass, FarmTile(column: 10, row: 12)),
+            (.longgrass, FarmTile(column: 9, row: 13))
+        ]
+        var inserted = false
+        for sample in samples where !occupied.contains(sample.1) {
+            context.insert(FarmPlacement(id: UUID(), kindRaw: sample.0.rawValue, varietySlug: nil, column: sample.1.column, row: sample.1.row))
+            inserted = true
+        }
+        if inserted {
+            try context.save()
+        }
     }
 
     @MainActor

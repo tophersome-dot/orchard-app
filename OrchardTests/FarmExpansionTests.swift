@@ -108,6 +108,19 @@ final class FarmExpansionTests: XCTestCase {
         XCTAssertTrue(planted.contains { $0.kind == .tractor && $0.tile == FarmExpansion.tractorTile })
     }
 
+    func testOrchardFenceSharesPostsAndKeepsOneGate() {
+        let pieces = FarmSurface.fenceEdges(in: FarmExpansion.starterRecords())
+        let posts = FarmSurface.fencePosts(on: pieces)
+        XCTAssertEqual(pieces.count, 31)
+        XCTAssertEqual(posts.count, 32)
+        let gate = FarmGridEdge(
+            anchor: IsoMap.corners(FarmTile(column: 4, row: 6))[2],
+            end: IsoMap.corners(FarmTile(column: 4, row: 6))[3],
+            runsNorthEast: false
+        )
+        XCTAssertFalse(pieces.contains(gate))
+    }
+
     func testIsoCenterRoundTrips() {
         let tile = FarmTile(column: 7, row: 2)
         XCTAssertEqual(IsoMap.tile(at: IsoMap.center(tile)), tile)
