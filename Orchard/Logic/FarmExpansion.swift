@@ -399,7 +399,8 @@ enum FarmExpansion {
         _ records: [FarmRecord],
         tried: [(id: String, zone: String)],
         tastedCount: Int,
-        openTiles: [FarmTile] = []
+        openTiles: [FarmTile] = [],
+        parked: Set<String> = []
     ) -> [FarmRecord] {
         let openSet = Set(openTiles)
         let zones = Dictionary(uniqueKeysWithValues: tried.map { ($0.id, $0.zone) })
@@ -431,15 +432,16 @@ enum FarmExpansion {
             }
         }
         if records.isEmpty || needsRelayout(records, tried: tried, plan: layout, openTiles: openSet) {
-            return placeAll(tried, plan: layout, openTiles: openTiles, zones: zones) + keptGround
+            return placeAll(tried, plan: layout, openTiles: openTiles, zones: zones, parked: parked) + keptGround
         }
         let triedIDs = Set(tried.map(\.id))
         var next = records.filter { record in
-            record.kind != .plant || (record.varietyID.map { triedIDs.contains($0) } ?? false)
+            if record.kind == .plant, let id = record.varietyID, parked.contains(id) { return false }
+            return record.kind != .plant || (record.varietyID.map { triedIDs.contains($0) } ?? false)
         }
         var occupied = Set(next.map(\.tile))
         var seats = openTiles
-        for item in tried where !next.contains(where: { $0.kind == .plant && $0.varietyID == item.id }) {
+        for item in tried where !parked.contains(item.id) && !next.contains(where: { $0.kind == .plant && $0.varietyID == item.id }) {
             if let index = seats.firstIndex(where: { seat in
                 !next.contains { record in
                     record.tile == seat && record.kind != .cleared && record.kind != .forest && !record.kind.isWater
@@ -500,12 +502,13 @@ enum FarmExpansion {
         _ tried: [(id: String, zone: String)],
         plan: YardPlan,
         openTiles: [FarmTile] = [],
-        zones: [String: String] = [:]
+        zones: [String: String] = [:],
+        parked: Set<String> = []
     ) -> [FarmRecord] {
         var next = records(for: plan)
         var occupied = Set(next.map(\.tile))
         var seats = openTiles
-        for item in tried {
+        for item in tried where !parked.contains(item.id) {
             if let index = seats.firstIndex(where: { !occupied.contains($0) }) {
                 let tile = seats.remove(at: index)
                 next.append(FarmRecord(id: UUID(), kind: .plant, varietyID: item.id, tile: tile))

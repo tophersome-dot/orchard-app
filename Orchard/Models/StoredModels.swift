@@ -241,6 +241,68 @@ final class FarmDecor {
     }
 }
 
+/// An item Chris lifted off the map. Plants here are not placed again by the yard layout.
+struct StoredRecord: Equatable, Identifiable, Sendable {
+    var id: UUID
+    var kind: FarmItemKind
+    var varietyID: String?
+    var sprite: String?
+    var scale: Double
+    var flipped: Bool
+    var rotation: Double
+}
+
+@Model
+final class FarmStoredItem {
+    var id: UUID
+    var kindRaw: String
+    var varietySlug: String?
+    var sprite: String?
+    var scale: Double
+    var flipped: Bool
+    var rotation: Double
+
+    init(
+        id: UUID,
+        kindRaw: String,
+        varietySlug: String?,
+        sprite: String?,
+        scale: Double,
+        flipped: Bool,
+        rotation: Double
+    ) {
+        self.id = id
+        self.kindRaw = kindRaw
+        self.varietySlug = varietySlug
+        self.sprite = sprite
+        self.scale = scale
+        self.flipped = flipped
+        self.rotation = rotation
+    }
+
+    var record: StoredRecord {
+        StoredRecord(
+            id: id,
+            kind: FarmItemKind(rawValue: kindRaw) ?? .bush,
+            varietyID: varietySlug,
+            sprite: sprite,
+            scale: scale,
+            flipped: flipped,
+            rotation: rotation
+        )
+    }
+}
+
+/// A tasted variety Chris removed from the farm. The tasting record stays.
+@Model
+final class FarmSkippedPlant {
+    var varietySlug: String
+
+    init(varietySlug: String) {
+        self.varietySlug = varietySlug
+    }
+}
+
 @Model
 final class FarmWorld {
     var seed: Int

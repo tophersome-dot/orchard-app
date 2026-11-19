@@ -89,7 +89,7 @@ enum IslandChartCache {
         lock.unlock()
         let started = CFAbsoluteTimeGetCurrent()
         let built = await Task.detached(priority: .userInitiated) { build() }.value
-        OrchardTiming.log(String(format: "island generate %.3fs ground %d decor %d", CFAbsoluteTimeGetCurrent() - started, built.ground.count, built.decor.count))
+        OrchardTiming.log(String(format: "island generate %.3fs ground %d decor %d key %@", CFAbsoluteTimeGetCurrent() - started, built.ground.count, built.decor.count, key))
         lock.lock()
         storedKey = key
         storedChart = built
@@ -135,7 +135,7 @@ enum Woodland {
     static let radiusGrowth: Double = 2
     static let radiusCap: Double = 50
     /// Bump when grove, water, or patch generation changes so existing saves rebuild.
-    static let generatorVersion = 5
+    static let generatorVersion = 6
 
     static func level(tastedCount: Int) -> Int {
         if let override = DebugLaunch.islandLevel {
@@ -325,7 +325,7 @@ enum Woodland {
                 let distance = (dx * dx + dy * dy).squareRoot()
                 let broad = field(column, row, seed: seed, cell: 7, salt: 1)
                 let detail = field(column, row, seed: seed, cell: 3, salt: 2)
-                let wobble = (broad - 0.5) * reachRadius * 0.62 + (detail - 0.5) * reachRadius * 0.16
+                let wobble = (broad - 0.5) * reachRadius * 0.34 + (detail - 0.5) * reachRadius * 0.10
                 if distance <= reachRadius + wobble {
                     land.insert(tile)
                 }

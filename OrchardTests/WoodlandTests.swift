@@ -76,6 +76,36 @@ final class WoodlandTests: XCTestCase {
         XCTAssertEqual(placed.first { $0.kind == .plant }?.tile, open)
     }
 
+    func testParkedPlantIsNotPutBack() {
+        let starter = FarmExpansion.starterRecords()
+        let placed = FarmExpansion.reconciled(
+            starter,
+            tried: [(id: "pink-lady", zone: "orchard")],
+            tastedCount: 1
+        )
+        let parked = FarmExpansion.reconciled(
+            placed,
+            tried: [(id: "pink-lady", zone: "orchard")],
+            tastedCount: 1,
+            parked: ["pink-lady"]
+        )
+        XCTAssertFalse(parked.contains { $0.varietyID == "pink-lady" })
+        XCTAssertTrue(parked.contains { $0.kind == .house })
+    }
+
+    func testCoastChamferRemovesTheSquareCorner() {
+        let square = [
+            CGPoint(x: 0, y: 0),
+            CGPoint(x: 48, y: 0),
+            CGPoint(x: 48, y: 48),
+            CGPoint(x: 0, y: 48)
+        ]
+        let rounded = ShoreOutline.round(square)
+        XCTAssertGreaterThan(rounded.count, square.count)
+        XCTAssertFalse(rounded.contains { hypot($0.x, $0.y) < 2 })
+        XCTAssertFalse(rounded.contains { hypot($0.x - 48, $0.y) < 2 })
+    }
+
     func testBridgeFollowsTheCrossing() {
         let creek = FarmTile(column: 4, row: 4)
         let paths: Set<FarmTile> = [

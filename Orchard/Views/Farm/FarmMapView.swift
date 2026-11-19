@@ -30,6 +30,9 @@ struct FarmMapView: View {
     var decor: [DecorRecord] = []
     var chart: IslandChart = .placeholder
     var shoreSeed: UInt64 = 1
+    var motion: FarmMotionState = FarmMotionState()
+    var ghost: FarmGhost? = nil
+    var showsGrid: Bool = false
     @State private var terrainCache = TerrainDrawCache()
     @State private var shoreCache = ShoreLoopCache()
 
@@ -63,9 +66,24 @@ struct FarmMapView: View {
                 drawSmoothedShore(in: context, size: size)
             }
             .allowsHitTesting(false)
-            if detailed {
+            if showsGrid {
                 Canvas { context, size in
-                    drawSprites(drawables(plan: plan), in: context, size: size)
+                    drawGrid(in: context, size: size)
+                }
+                .allowsHitTesting(false)
+                .opacity(0.9)
+            }
+            if let ghost {
+                Canvas { context, size in
+                    drawGhost(ghost, in: context, size: size)
+                }
+                .allowsHitTesting(false)
+            }
+            if detailed {
+                TimelineView(.animation(minimumInterval: motion.reduceMotion ? 10 : 1.0 / 30.0, paused: motion.reduceMotion)) { timeline in
+                    Canvas { context, size in
+                        drawSprites(drawables(plan: plan), in: context, size: size, clock: timeline.date)
+                    }
                 }
                 .allowsHitTesting(false)
                 let labels = visibleLabels(in: drawables(plan: plan), canvas: canvasSize)
@@ -74,10 +92,12 @@ struct FarmMapView: View {
                 }
             }
             if !hoverTiles.isEmpty {
-                let tint = (hoverValid ? Color.green : Color.red).opacity(0.35)
+                let tint = (hoverValid ? Color.green : Color.red).opacity(0.45)
                 ForEach(Array(hoverTiles.enumerated()), id: \.offset) { _, tile in
                     IsoDiamond()
                         .fill(tint)
+                        .overlay(IsoDiamond().stroke(Color.white.opacity(0.8), lineWidth: 2))
+                        .shadow(color: hoverValid ? Color.green : Color.red, radius: 8)
                         .frame(width: IsoMap.tileWidth * camera.scale, height: IsoMap.tileHeight * camera.scale)
                         .position(camera.screenPoint(IsoMap.center(tile), in: canvasSize))
                 }
@@ -549,10 +569,11 @@ struct FarmMapView: View {
         return CGRect(x: item.point.x - item.width / 2, y: originY, width: item.width, height: item.foot)
     }
 
-    private func drawSprites(_ items: [MapDrawable], in context: GraphicsContext, size: CGSize) {
+    private func drawSprites(_ items: [MapDrawable], in context: GraphicsContext, size: CGSize, clock: Date) {
         let view = CGRect(origin: .zero, size: size).insetBy(dx: -12, dy: -12)
         var resolved: [String: GraphicsContext.ResolvedImage] = [:]
         for item in items {
+            let pose = spritePose(item, clock: clock)
             let rect = spriteRect(item)
             guard rect.intersects(view) else { continue }
             guard let name = spriteName(item.visual) else { continue }
@@ -563,19 +584,77 @@ struct FarmMapView: View {
             let pivot = item.pivot ?? item.point
             context.drawLayer { layer in
                 layer.opacity = item.opacity
-                if item.rotation != 0 || item.flipped {
+                if pose.lifted {
+                    let shadow = CGRect(x: pivot.x - item.width * 0.32, y: pivot.y - 5, width: item.width * 0.64, height: 10)
+                    layer.fill(Path(ellipseIn: shadow), with: .color(Color.black.opacity(0.28)))
+                }
+                if pose.rotation != 0 || pose.flipped || pose.scaleX != 1 || pose.scaleY != 1 {
                     layer.translateBy(x: pivot.x, y: pivot.y)
-                    if item.rotation != 0 {
-                        layer.rotate(by: .radians(item.rotation))
+                    if pose.rotation != 0 {
+                        layer.rotate(by: .radians(pose.rotation))
                     }
-                    if item.flipped {
-                        layer.scaleBy(x: -1, y: 1)
-                    }
+                    layer.scaleBy(x: (pose.flipped ? -1 : 1) * pose.scaleX, y: pose.scaleY)
                     layer.translateBy(x: -pivot.x, y: -pivot.y)
                 }
                 layer.draw(image, in: rect)
             }
         }
+    }
+
+    private struct SpritePose {
+        var rotation: Double
+        var flipped: Bool
+        var scaleX: CGFloat
+        var scaleY: CGFloat
+        var lifted: Bool
+    }
+
+    private func spritePose(_ item: MapDrawable, clock: Date) -> SpritePose {
+        let keys = motionKeys(item)
+        let lifted = motion.liftedID.map { keys.contains($0) } ?? false
+        var rotation = item.rotation
+        var scaleX: CGFloat = 1
+        var scaleY: CGFloat = 1
+        let swaying = item.tall || isCrop(item)
+        if swaying, !motion.reduceMotion {
+            let phase = Double((item.tile?.column ?? 0) * 3 + (item.tile?.row ?? 0))
+            rotation += sin(clock.timeIntervalSinceReferenceDate * 1.25 + phase) * 0.035
+        }
+        if lifted {
+            scaleX = 1.08
+            scaleY = 1.08
+            if !motion.reduceMotion {
+                rotation += sin(clock.timeIntervalSinceReferenceDate * 7) * 0.04
+            }
+        }
+        if let born = keys.compactMap({ motion.bounces[$0] }).first {
+            let age = clock.timeIntervalSince(born)
+            if age >= 0, age < 0.42, !motion.reduceMotion {
+                let stretch = sin(age / 0.42 * .pi * 2) * (1 - age / 0.42)
+                scaleX *= CGFloat(1 + 0.14 * stretch)
+                scaleY *= CGFloat(1 - 0.16 * stretch)
+            }
+        }
+        if let born = keys.compactMap({ motion.sprouts[$0] }).first {
+            let age = min(0.6, max(0, clock.timeIntervalSince(born)))
+            let progress = motion.reduceMotion ? 1 : age / 0.6
+            let grow = 0.15 + 0.85 * (1 - pow(1 - progress, 3))
+            scaleX *= CGFloat(grow)
+            scaleY *= CGFloat(grow)
+        }
+        return SpritePose(rotation: rotation, flipped: item.flipped, scaleX: scaleX, scaleY: scaleY, lifted: lifted)
+    }
+
+    private func motionKeys(_ item: MapDrawable) -> [String] {
+        if item.id.hasPrefix("crop-") {
+            return [item.id, String(item.id.dropFirst(5))]
+        }
+        return [item.id, "crop-\(item.id)"]
+    }
+
+    private func isCrop(_ item: MapDrawable) -> Bool {
+        if case .plant = item.visual { return true }
+        return item.id.hasPrefix("crop-")
     }
 
     @ViewBuilder
@@ -620,7 +699,7 @@ struct FarmMapView: View {
         let sandBank = context.resolve(Image(FarmSprite.edgeBankSand))
         let band = IsoMap.tileWidth * 0.28 * camera.scale
         for (index, loop) in loops.enumerated() {
-            let screen = loop.map { camera.screenPoint($0, in: size) }
+            let screen = ShoreOutline.sample(loop, spacing: 20).map { camera.screenPoint($0, in: size) }
             let image = index.isMultiple(of: 3) ? sandBank : grassBank
             drawTexturedBand(image, along: screen, width: band, in: context, canvas: size, fade: true, towardCenter: true)
         }
@@ -629,7 +708,7 @@ struct FarmMapView: View {
     private func smoothedWaterLoops() -> [[CGPoint]] {
         let key = "water-\(chart.lakes.count)-\(chart.creek.count)"
         if shoreCache.waterKey == key { return shoreCache.water }
-        let loops = boundaryLoops(of: chart.lakes.union(chart.creek)).map { roundOutline($0) }
+        let loops = boundaryLoops(of: chart.lakes.union(chart.creek)).map { ShoreOutline.round($0) }
         shoreCache.waterKey = key
         shoreCache.water = loops
         return loops
@@ -688,7 +767,7 @@ struct FarmMapView: View {
         let cliffWidth = IsoMap.tileWidth * 0.42 * camera.scale
         let foamWidth = IsoMap.tileWidth * 0.25 * camera.scale
         for loop in loops {
-            let screen = loop.map { camera.screenPoint($0, in: size) }
+            let screen = ShoreOutline.sample(loop, spacing: 22).map { camera.screenPoint($0, in: size) }
             drawTexturedBand(cliff, along: screen, width: cliffWidth, in: context, canvas: size)
             drawTexturedBand(foam, along: screen, width: foamWidth, in: context, canvas: size)
         }
@@ -833,19 +912,22 @@ struct FarmMapView: View {
     private func smoothedLandLoops() -> [[CGPoint]] {
         let key = "land-\(chart.ground.count)-\(chart.lakes.count)-\(chart.creek.count)"
         if shoreCache.landKey == key { return shoreCache.land }
-        let loops = boundaryLoops(of: chart.ground).map { roundOutline($0) }
+        let loops = boundaryLoops(of: chart.ground).map { ShoreOutline.round($0) }
         shoreCache.landKey = key
         shoreCache.land = loops
         return loops
     }
 
     private func smoothedCoastLoops() -> [[CGPoint]] {
-        let key = "coast-\(chart.ground.count)-\(chart.lakes.count)-\(chart.creek.count)"
-        if shoreCache.coastKey == key { return shoreCache.coast }
         let mass = chart.ground.union(chart.water)
-        let loops = boundaryLoops(of: mass).map { roundOutline($0) }
+        let columns = mass.map(\.column)
+        let rows = mass.map(\.row)
+        let key = "coast-\(mass.count)-\(columns.min() ?? 0)-\(columns.max() ?? 0)-\(rows.min() ?? 0)-\(rows.max() ?? 0)"
+        if shoreCache.coastKey == key { return shoreCache.coast }
+        let loops = boundaryLoops(of: mass).map { ShoreOutline.round($0) }
         shoreCache.coastKey = key
         shoreCache.coast = loops
+        OrchardTiming.log("coast loops \(loops.count) points \(loops.first?.count ?? 0) ground \(mass.count)")
         return loops
     }
 
@@ -931,7 +1013,7 @@ struct FarmMapView: View {
             guard !tiles.isEmpty else { continue }
             fills.append((kind, tiles))
             if natural.contains(kind) {
-                smooth[kind] = boundaryLoops(of: tiles).map { roundOutline($0) }
+                smooth[kind] = boundaryLoops(of: tiles).map { ShoreOutline.round($0) }
             } else {
                 let boundary = FarmSurface.boundaryEdges(of: tiles).map { (edge: $0.edge, owner: $0.outwardFrom) }
                 edges.append((kind, boundary))
@@ -1029,29 +1111,46 @@ struct FarmMapView: View {
         return loops
     }
 
-    /// Cuts each corner by about half a tile, then eases the chamfer into a curve.
-    private func roundOutline(_ points: [CGPoint]) -> [CGPoint] {
-        let chamfered = chaikin(points, passes: 2, weight: 0.5)
-        return chaikin(chamfered, passes: 1, weight: 0.25)
+    private func drawGrid(in context: GraphicsContext, size: CGSize) {
+        let bounds = visibleTileBounds(in: size, margin: 1)
+        var path = Path()
+        let halfWidth = IsoMap.halfWidth * camera.scale
+        let halfHeight = IsoMap.halfHeight * camera.scale
+        for column in bounds.columns {
+            for row in bounds.rows {
+                let tile = FarmTile(column: column, row: row)
+                guard chart.ground.contains(tile) else { continue }
+                let center = camera.screenPoint(IsoMap.center(tile), in: size)
+                path.move(to: CGPoint(x: center.x, y: center.y - halfHeight))
+                path.addLine(to: CGPoint(x: center.x + halfWidth, y: center.y))
+                path.addLine(to: CGPoint(x: center.x, y: center.y + halfHeight))
+                path.addLine(to: CGPoint(x: center.x - halfWidth, y: center.y))
+                path.closeSubpath()
+            }
+        }
+        context.stroke(path, with: .color(Color.white.opacity(0.22)), lineWidth: 1)
     }
 
-    private func chaikin(_ points: [CGPoint], passes: Int, weight: CGFloat = 0.25) -> [CGPoint] {
-        var pts = points
-        let keep = min(max(weight, 0.05), 0.5)
-        let take = 1 - keep
-        for _ in 0..<passes {
-            guard pts.count >= 3 else { return pts }
-            var next: [CGPoint] = []
-            next.reserveCapacity(pts.count * 2)
-            for index in pts.indices {
-                let current = pts[index]
-                let following = pts[(index + 1) % pts.count]
-                next.append(CGPoint(x: current.x * take + following.x * keep, y: current.y * take + following.y * keep))
-                next.append(CGPoint(x: current.x * keep + following.x * take, y: current.y * keep + following.y * take))
+    private func drawGhost(_ ghost: FarmGhost, in context: GraphicsContext, size: CGSize) {
+        let center = camera.screenPoint(IsoMap.center(ghost.tile), in: size)
+        let halfWidth = IsoMap.halfWidth * camera.scale
+        let halfHeight = IsoMap.halfHeight * camera.scale
+        var path = Path()
+        path.move(to: CGPoint(x: center.x, y: center.y - halfHeight))
+        path.addLine(to: CGPoint(x: center.x + halfWidth, y: center.y))
+        path.addLine(to: CGPoint(x: center.x, y: center.y + halfHeight))
+        path.addLine(to: CGPoint(x: center.x - halfWidth, y: center.y))
+        path.closeSubpath()
+        let tint = ghost.valid ? Color.green.opacity(0.35) : Color.red.opacity(0.35)
+        context.fill(path, with: .color(tint))
+        if let sprite = ghost.sprite {
+            let width = IsoMap.tileWidth * camera.scale
+            let rect = CGRect(x: center.x - width / 2, y: center.y - width, width: width, height: width)
+            context.drawLayer { layer in
+                layer.opacity = 0.55
+                layer.draw(layer.resolve(Image(sprite)), in: rect)
             }
-            pts = next
         }
-        return pts
     }
 
     /// One name per nearby cluster, then drop any label whose pill would cover one already kept.

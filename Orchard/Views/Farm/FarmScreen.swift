@@ -5,12 +5,8 @@ import UIKit
 private struct FarmEditSnapshot {
     var records: [FarmRecord]
     var decor: [DecorRecord]
-}
-
-private struct LeafPuff: Identifiable {
-    var id = UUID()
-    var tile: FarmTile
-    var born = Date()
+    var stored: [StoredRecord]
+    var skipped: [String]
 }
 
 private enum FarmTool: Hashable {
@@ -58,7 +54,7 @@ private enum MapGesture {
     case place
 }
 
-/// Zoom factors are multiples of the fit-to-farm scale.
+/// Pinch limits are multiples of the geometric fit. `-farmZoom` is an absolute scale and is not multiplied by it.
 private enum FarmZoom {
     static let minimum: CGFloat = 0.5
     static let maximum: CGFloat = 2.5
@@ -98,6 +94,8 @@ private enum FarmViewMemory {
 struct FarmScreen: View {
     @Query private var placements: [FarmPlacement]
     @Query private var decorItems: [FarmDecor]
+    @Query private var storedItems: [FarmStoredItem]
+    @Query private var skippedPlants: [FarmSkippedPlant]
     @Query private var worlds: [FarmWorld]
     @Query(sort: \Variety.name) private var varieties: [Variety]
     @Environment(\.modelContext) private var context
@@ -111,8 +109,26 @@ struct FarmScreen: View {
     @State private var chart = IslandChart.placeholder
     @State private var chartKey = ""
     @State private var selectedDecor: UUID?
+    @State private var selectedRecord: UUID?
     @State private var draggingDecor = false
-    @State private var puffs: [LeafPuff] = []
+    @State private var honorLaunchZoom: Bool
+    @State private var storageOpen = false
+    @State private var armedStorage: UUID?
+    @State private var armedMove = false
+    @State private var brushTile: FarmTile?
+    @State private var sparks: [FarmSpark] = []
+    @State private var falling: [FallingTree] = []
+    @State private var bounces: [String: Date] = [:]
+    @State private var sprouts: [String: Date] = [:]
+    @State private var knownPlants: Set<UUID>?
+    @State private var sawChart = false
+    @State private var bannerText: String?
+    @State private var shakeOffset: CGFloat = 0
+    @State private var minimapHidden = false
+    @State private var soundOn = true
+    @State private var deletePlant: FarmRecord?
+    @State private var suppressTap = false
+    @State private var seededStorage = false
     @State private var scale: CGFloat
     @State private var lastScale: CGFloat
     @State private var offset: CGSize
@@ -134,6 +150,9 @@ struct FarmScreen: View {
         _worldCenter = State(initialValue: saved?.center ?? .zero)
         _framed = State(initialValue: saved != nil)
         _userMoved = State(initialValue: saved != nil)
+        _honorLaunchZoom = State(initialValue: DebugLaunch.farmZoom != nil)
+        _minimapHidden = State(initialValue: UserDefaults.standard.bool(forKey: "orchard.minimap.hidden"))
+        _soundOn = State(initialValue: FarmAudio.enabled)
     }
     @State private var scenery = false
     @State private var frameRequest = 0
@@ -195,7 +214,7 @@ struct FarmScreen: View {
     }
 
     private func resolvedCamera(in viewSize: CGSize) -> FarmCamera {
-        if let zoom = DebugLaunch.farmZoom {
+        if honorLaunchZoom, let zoom = DebugLaunch.farmZoom {
             var shown = framed ? camera : fittedCamera(in: viewSize)
             shown.scale = zoom
             return shown
@@ -226,24 +245,27 @@ struct FarmScreen: View {
                     hoverTiles: hoverFootprint,
                     decor: displayDecor,
                     chart: chart,
-                    shoreSeed: UInt64(bitPattern: Int64(worlds.first?.seed ?? 1))
+                    shoreSeed: UInt64(bitPattern: Int64(worlds.first?.seed ?? 1)),
+                    motion: FarmMotionState(
+                        liftedID: dragging?.uuidString,
+                        bounces: bounces,
+                        sprouts: sprouts,
+                        reduceMotion: UIAccessibility.isReduceMotionEnabled
+                    ),
+                    ghost: brushGhost,
+                    showsGrid: editing
                 )
-                if !puffs.isEmpty {
-                    TimelineView(.animation(minimumInterval: 0.05)) { timeline in
-                        Canvas { context, _ in
-                            let now = timeline.date
-                            for puff in puffs {
-                                let age = now.timeIntervalSince(puff.born)
-                                let fade = max(0, 1 - age / 0.7)
-                                let center = shown.screenPoint(IsoMap.center(puff.tile), in: geo.size)
-                                let radius = IsoMap.tileWidth * shown.scale * CGFloat(0.35 + age)
-                                let rect = CGRect(x: center.x - radius, y: center.y - radius * 0.7, width: radius * 2, height: radius * 1.4)
-                                context.fill(Path(ellipseIn: rect), with: .color(Color(red: 0.45, green: 0.72, blue: 0.28).opacity(0.45 * fade)))
-                            }
-                        }
-                        .allowsHitTesting(false)
-                    }
-                }
+                .offset(x: shakeOffset)
+                FarmJuiceOverlay(
+                    sparks: sparks,
+                    falling: falling,
+                    brush: brushPoint(in: geo.size, camera: shown),
+                    banner: bannerText,
+                    selected: selectionTile,
+                    camera: shown,
+                    canvasSize: geo.size,
+                    reduceMotion: UIAccessibility.isReduceMotionEnabled
+                )
                 MapGestureOverlay(
                     brush: tool.isBrush && editing,
                     onPinch: { magnification, point, state in
@@ -255,12 +277,14 @@ struct FarmScreen: View {
                     onOnePan: { start, current, translation, state in
                         handleOnePan(start: start, current: current, translation: translation, state: state, in: geo.size)
                     },
+                    onLongPress: { point, state in
+                        handleLongPress(point, state: state, in: geo.size)
+                    },
                     onDoubleTap: { point in
                         toggleZoom(at: point, in: geo.size)
                     },
                     onSingleTap: { point in
-                        guard !editing, let slug = plantSlug(at: point, in: geo.size) else { return }
-                        selected = VarietyLink(id: slug)
+                        handleSingleTap(point, in: geo.size)
                     }
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -275,18 +299,50 @@ struct FarmScreen: View {
                     frameHouse(in: geo.size)
                 }
                 if DebugLaunch.demoTerrain { editing = true }
+                applyDebugChrome()
             }
             .onDisappear { saveCamera() }
             .onChange(of: geo.size) { _, newSize in mapSize = newSize }
             .onChange(of: frameRequest) { _, _ in frameHouse(in: geo.size) }
             .onChange(of: worlds.first?.seed) { _, _ in updateChart() }
             .onChange(of: tastedCount) { _, _ in updateChart() }
+            .onChange(of: plantKey) { _, key in
+                noteNewPlants(key)
+            }
         }
+        .coordinateSpace(name: "farm")
         .overlay(alignment: .top) { topBar }
-        .overlay(alignment: .bottom) { editBar }
+        .overlay(alignment: .topLeading) {
+            FarmHintLayer(force: DebugLaunch.showHints)
+                .padding(.leading, 16)
+                .padding(.top, 78)
+        }
+        .overlay(alignment: .topTrailing) {
+            minimapOverlay
+                .padding(.trailing, 12)
+                .padding(.top, 64)
+        }
+        .overlay(alignment: .bottom) { bottomChrome }
         .overlay(alignment: .bottomTrailing) { zoomButtons }
+        .overlay { selectionChrome }
         .sheet(item: $selected) { link in
             VarietyDetailView(slug: link.id)
+        }
+        .confirmationDialog(
+            "Remove this plant from the farm?",
+            isPresented: Binding(
+                get: { deletePlant != nil },
+                set: { if !$0 { deletePlant = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let deletePlant { performDelete(deletePlant) }
+                deletePlant = nil
+            }
+            Button("Cancel", role: .cancel) { deletePlant = nil }
+        } message: {
+            Text("This takes it off the map only. The tasting stays in your collection.")
         }
         .task(id: triedSignature) {
             // The grass frame commits before any PNG decode or store rewrite.
@@ -305,6 +361,7 @@ struct FarmScreen: View {
             let tried = varieties.filter(\.isTried).map { (id: $0.slug, zone: $0.zoneRaw) }
             try? await FarmLayout.sync(context: context, tried: tried)
             updateChart()
+            applyDebugChrome()
             if DebugLaunch.farmZoom == nil, !userMoved {
                 framed = false
                 frameRequest += 1
@@ -366,91 +423,186 @@ struct FarmScreen: View {
         }
     }
 
+    private var islandLevel: Int {
+        Woodland.level(tastedCount: tastedCount)
+    }
+
     private var topBar: some View {
-        HStack(spacing: 12) {
-            VStack(spacing: 1) {
-                Text("Chris's Orchard")
-                    .font(.system(size: 18, weight: .semibold))
-                Text("\(tastedCount) planted")
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(.secondary)
-            }
-            .foregroundStyle(OrchardColor.ink)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: Capsule())
-            Spacer(minLength: 0)
-            Button(editing ? "Done" : "Edit") {
-                editing.toggle()
-                if !editing {
-                    tool = .move
-                    clearGesture()
-                }
-            }
-            .font(.system(size: 15, weight: .semibold))
-            .foregroundStyle(OrchardColor.grassDeep)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: Capsule())
-        }
-        .padding(.horizontal, 16)
+        let radius = Woodland.radius(level: islandLevel)
+        let next = radius >= Woodland.radiusCap ? "Island is full" : "Next shore +\(Int(Woodland.radiusGrowth)) tiles"
+        return FarmLevelHeader(
+            level: islandLevel,
+            progress: radius / Woodland.radiusCap,
+            detail: "\(tastedCount) collected · \(next)",
+            soundOn: soundOn,
+            editing: editing,
+            onSound: {
+                soundOn.toggle()
+                FarmAudio.enabled = soundOn
+                FarmAudio.tick()
+            },
+            onEdit: toggleEditing
+        )
+        .padding(.horizontal, 12)
         .padding(.top, 8)
     }
 
-    @ViewBuilder
-    private var editBar: some View {
-        if editing {
-            VStack(spacing: 6) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(FarmTool.palette, id: \.self) { item in
+    private var bottomChrome: some View {
+        VStack(spacing: 8) {
+            if storageOpen {
+                FarmStorageTray(
+                    stacks: storageStacks,
+                    onClose: { storageOpen = false },
+                    onTap: { id in
+                        armedStorage = id
+                        storageOpen = false
+                        FarmAudio.tick()
+                    },
+                    onDrag: { id, point, ended in
+                        armedStorage = id
+                        let tile = self.tile(at: point, in: mapSize)
+                        brushTile = tile
+                        hover = tile
+                        hoverValid = storageValid(id, on: tile)
+                        if ended {
+                            placeStored(id, on: tile)
+                        }
+                    }
+                )
+                .padding(.horizontal, 12)
+            }
+            if editing {
+                if tool.isBrush {
+                    paletteRow
+                }
+                FarmEditToolbar(
+                    moveOn: tool == .move,
+                    paintOn: isPaintTool,
+                    axeOn: tool == .clear,
+                    storageOn: storageOpen,
+                    canUndo: !undo.isEmpty,
+                    onMove: { selectTool(.move) },
+                    onPaint: { selectTool(.paint(.path)) },
+                    onAxe: { selectTool(.clear) },
+                    onStorage: {
+                        storageOpen.toggle()
+                        FarmAudio.tick()
+                    },
+                    onUndo: { undoLast() },
+                    onDone: toggleEditing
+                )
+                .padding(.horizontal, 10)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .padding(.bottom, 8)
+        .animation(UIAccessibility.isReduceMotionEnabled ? nil : .spring(response: 0.35, dampingFraction: 0.86), value: editing)
+    }
+
+    private var isPaintTool: Bool {
+        if case .paint = tool { return true }
+        if case .decor = tool { return true }
+        return false
+    }
+
+    private var paletteRow: some View {
+        VStack(spacing: 6) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(FarmTool.palette, id: \.self) { item in
+                        if item != .move && item != .clear {
                             Button {
-                                tool = item
-                                selectedDecor = nil
-                                clearGesture()
+                                selectTool(item)
                             } label: {
                                 toolLabel(item)
                             }
                             .buttonStyle(.plain)
                         }
-                        if selectedDecor != nil {
-                            Button("Remove") { deleteSelectedDecor() }
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(OrchardColor.ink)
-                        }
-                        Button("Undo") { undoLast() }
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(undo.isEmpty ? Color.secondary : OrchardColor.ink)
-                            .disabled(undo.isEmpty)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(.ultraThinMaterial, in: Capsule())
                 }
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(DecorSprite.Category.allCases.filter { $0 != .water }, id: \.self) { category in
-                            Text(category.rawValue.capitalized)
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                            ForEach(Woodland.palette(in: category)) { sprite in
-                                Button {
-                                    tool = .decor(sprite.name)
-                                    selectedDecor = nil
-                                    clearGesture()
-                                } label: {
-                                    decorLabel(sprite)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.ultraThinMaterial, in: Capsule())
-                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
             }
-            .padding(.bottom, 8)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(DecorSprite.Category.allCases.filter { $0 != .water }, id: \.self) { category in
+                        Text(category.rawValue.capitalized)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                        ForEach(Woodland.palette(in: category)) { sprite in
+                            Button {
+                                selectTool(.decor(sprite.name))
+                            } label: {
+                                decorLabel(sprite)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+            }
+        }
+        .background(.ultraThinMaterial, in: Capsule())
+        .padding(.horizontal, 12)
+    }
+
+    @ViewBuilder
+    private var selectionChrome: some View {
+        if let tile = selectionTile, editing || armedMove {
+            let point = resolvedCamera(in: mapSize).screenPoint(IsoMap.center(tile), in: mapSize)
+            FarmSelectionButtons(
+                canFlip: selectedDecor != nil,
+                canStore: canStoreSelection,
+                onMove: {
+                    armedMove = true
+                    tool = .move
+                    FarmAudio.tick()
+                },
+                onFlip: flipSelected,
+                onRotate: rotateSelected,
+                onStore: storeSelection,
+                onDelete: deleteSelection
+            )
+            .position(x: min(mapSize.width - 90, point.x + 70), y: max(80, point.y - 36))
+        }
+    }
+
+    @ViewBuilder
+    private var minimapOverlay: some View {
+        let shown = resolvedCamera(in: mapSize)
+        let fit = fitScale(in: mapSize)
+        let wide = islandScreenSpan(at: fit) > mapSize.width * 1.5
+        if wide, mapSize.width > 1 {
+            if minimapHidden {
+                FarmMinimapRestore {
+                    minimapHidden = false
+                    UserDefaults.standard.set(false, forKey: "orchard.minimap.hidden")
+                }
+            } else {
+                FarmMinimap(
+                    ground: chart.ground,
+                    water: chart.water,
+                    woods: chart.groves,
+                    farm: FarmExpansion.clearingTiles(for: yardPlan),
+                    camera: shown,
+                    mapSize: mapSize,
+                    onJump: { world in
+                        honorLaunchZoom = false
+                        userMoved = true
+                        withAnimation(UIAccessibility.isReduceMotionEnabled ? nil : .spring(response: 0.4, dampingFraction: 0.86)) {
+                            worldCenter = world
+                            offset = .zero
+                            lastOffset = .zero
+                        }
+                        saveCamera()
+                    },
+                    onHide: {
+                        minimapHidden = true
+                        UserDefaults.standard.set(true, forKey: "orchard.minimap.hidden")
+                    }
+                )
+            }
         }
     }
 
@@ -494,28 +646,26 @@ struct FarmScreen: View {
 
     private func handleOnePan(start: CGPoint, current: CGPoint, translation: CGSize, state: UIGestureRecognizer.State, in viewSize: CGSize) {
         let travel = hypot(translation.width, translation.height)
-        if state == .began || gesture == .undecided {
+        if gesture != .moveItem, state == .began || gesture == .undecided {
             if editing, tool.isBrush {
                 gesture = .place
-            } else if editing, tool == .move, let found = hit(at: start, in: viewSize) {
+            } else if let found = pickedUp(at: start, in: viewSize) {
+                beginMove(found)
+            } else if armedMove, let id = selectedDecor ?? selectedRecord {
                 gesture = .moveItem
-                switch found {
-                case .record(let record):
-                    dragging = record.id
-                    draggingDecor = false
-                case .decor(let decor):
-                    dragging = decor.id
-                    draggingDecor = true
-                    selectedDecor = decor.id
-                }
+                dragging = id
+                draggingDecor = selectedDecor != nil
+                armedMove = false
             } else if travel > 6 {
                 gesture = .pan
                 userMoved = true
+                honorLaunchZoom = false
             }
         }
         switch gesture {
         case .pan:
             userMoved = true
+            honorLaunchZoom = false
             offset = CGSize(width: lastOffset.width + translation.width, height: lastOffset.height + translation.height)
         case .moveItem:
             let next = tile(at: current, in: viewSize)
@@ -527,6 +677,7 @@ struct FarmScreen: View {
             }
             hoverValid = placementValid(next)
         case .place:
+            brushTile = tile(at: current, in: viewSize)
             let origin = oneFingerPoint ?? start
             paint(from: origin, to: current, in: viewSize)
             oneFingerPoint = current
@@ -534,53 +685,127 @@ struct FarmScreen: View {
             break
         }
         if state == .ended || state == .cancelled || state == .failed {
-            oneFingerPoint = nil
-            if gesture == .pan {
-                lastOffset = offset
-                saveCamera()
-            } else if gesture == .moveItem, draggingDecor {
-                if hoverValid, let hover, let dragging, let moving = decorRecords.first(where: { $0.id == dragging }), moving.tile != hover {
-                    var next = decorRecords
-                    if let index = next.firstIndex(where: { $0.id == dragging }) {
-                        next[index].tile = hover
-                        next[index].origin = "placed"
-                        commitDecor(next)
-                    }
+            finishGesture()
+        }
+    }
+
+    private func pickedUp(at start: CGPoint, in viewSize: CGSize) -> FarmHit? {
+        let editingMove = editing && tool == .move
+        let direct = !editing && gesture == .undecided && false
+        guard editingMove || direct else { return nil }
+        return hit(at: start, in: viewSize)
+    }
+
+    private func beginMove(_ found: FarmHit) {
+        gesture = .moveItem
+        switch found {
+        case .record(let record):
+            dragging = record.id
+            draggingDecor = false
+            selectedRecord = record.id
+            selectedDecor = nil
+        case .decor(let decor):
+            dragging = decor.id
+            draggingDecor = true
+            selectedDecor = decor.id
+            selectedRecord = nil
+        }
+    }
+
+    private func handleLongPress(_ point: CGPoint, state: UIGestureRecognizer.State, in viewSize: CGSize) {
+        switch state {
+        case .began:
+            guard let found = hit(at: point, in: viewSize) else { return }
+            switch found {
+            case .record(let record):
+                guard !record.kind.isTerrain, record.kind != .fence, record.kind != .cleared else {
+                    reject()
+                    return
                 }
-            } else if gesture == .moveItem {
-                if hoverValid, let hover, let dragging, let moving = records.first(where: { $0.id == dragging }), moving.tile != hover {
-                    let carried = moving.kind == .plant ? plants[moving.varietyID ?? ""] : nil
-                    let spot = carried.map { FarmExpansion.spotKind(zone: $0.zone) }
-                    commit { records in
-                        guard let index = records.firstIndex(where: { $0.id == dragging }) else { return }
-                        let origin = records[index].tile
-                        records[index].tile = hover
-                        guard spot == .bed || spot == .vine else { return }
-                        let destinationHasSoil = records.contains { $0.kind == .tilled && $0.tile == hover }
-                        if destinationHasSoil {
-                            records.removeAll { $0.kind == .tilled && $0.tile == origin }
-                        } else if let soil = records.firstIndex(where: { $0.kind == .tilled && $0.tile == origin }) {
-                            records[soil].tile = hover
-                        } else {
-                            records.append(FarmRecord(id: UUID(), kind: .tilled, varietyID: nil, tile: hover))
-                        }
-                    }
-                }
-            } else if gesture == .place {
-                if case .decor = tool {
-                    commitDecorStroke()
-                } else if tool == .clear {
-                    commitClear()
-                } else {
-                    commitPaint()
-                }
+            case .decor:
+                break
             }
+            beginMove(found)
+            suppressTap = true
+            hover = tile(at: point, in: viewSize)
+            if let hover { hoverValid = placementValid(hover) }
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        case .changed:
+            guard gesture == .moveItem else { return }
+            let next = tile(at: point, in: viewSize)
+            hover = next
+            hoverValid = placementValid(next)
+        case .ended:
+            finishGesture()
+        case .cancelled, .failed:
+            if gesture == .moveItem {
+                finishGesture()
+            }
+        default:
+            break
+        }
+    }
+
+    private func finishGesture() {
+        let finished = gesture
+        oneFingerPoint = nil
+        if finished == .pan {
+            lastOffset = offset
+            saveCamera()
+        } else if finished == .moveItem, draggingDecor {
+            if hoverValid, let hover, let dragging, let moving = decorRecords.first(where: { $0.id == dragging }), moving.tile != hover {
+                var next = decorRecords
+                if let index = next.firstIndex(where: { $0.id == dragging }) {
+                    next[index].tile = hover
+                    next[index].origin = "placed"
+                    commitDecor(next)
+                    placed(dragging, on: hover)
+                }
+            } else if hover != nil, hoverValid == false {
+                reject()
+            }
+        } else if finished == .moveItem {
+            if hoverValid, let hover, let dragging, let moving = records.first(where: { $0.id == dragging }), moving.tile != hover {
+                let carried = moving.kind == .plant ? plants[moving.varietyID ?? ""] : nil
+                let spot = carried.map { FarmExpansion.spotKind(zone: $0.zone) }
+                commit { records in
+                    guard let index = records.firstIndex(where: { $0.id == dragging }) else { return }
+                    let origin = records[index].tile
+                    records[index].tile = hover
+                    guard spot == .bed || spot == .vine else { return }
+                    let destinationHasSoil = records.contains { $0.kind == .tilled && $0.tile == hover }
+                    if destinationHasSoil {
+                        records.removeAll { $0.kind == .tilled && $0.tile == origin }
+                    } else if let soil = records.firstIndex(where: { $0.kind == .tilled && $0.tile == origin }) {
+                        records[soil].tile = hover
+                    } else {
+                        records.append(FarmRecord(id: UUID(), kind: .tilled, varietyID: nil, tile: hover))
+                    }
+                }
+                placed(dragging, on: hover)
+            } else if let hover, let dragging, let moving = records.first(where: { $0.id == dragging }), moving.tile != hover, !hoverValid {
+                reject()
+            }
+        } else if finished == .place {
+            let painted = !paintStroke.isEmpty || !decorStroke.isEmpty || !clearTiles.isEmpty
+            if case .decor = tool {
+                commitDecorStroke()
+            } else if tool == .clear {
+                commitClear()
+            } else {
+                commitPaint()
+            }
+            brushTile = nil
+            if !painted { reject() }
+        }
+        if finished != .undecided {
             clearGesture()
         }
     }
 
     private func handleTwoPan(_ translation: CGSize, state: UIGestureRecognizer.State) {
         userMoved = true
+        honorLaunchZoom = false
         if state == .changed || state == .began {
             offset = CGSize(width: lastOffset.width + translation.width, height: lastOffset.height + translation.height)
         }
@@ -594,6 +819,7 @@ struct FarmScreen: View {
         switch state {
         case .began:
             userMoved = true
+            honorLaunchZoom = false
             pinchStartScale = scale
             pinchWorld = resolvedCamera(in: viewSize).worldPoint(point, in: viewSize)
         case .changed:
@@ -650,6 +876,7 @@ struct FarmScreen: View {
 
     private func toggleZoom(at point: CGPoint, in viewSize: CGSize) {
         userMoved = true
+        honorLaunchZoom = false
         let fit = fittedCamera(in: viewSize)
         let close = fit.scale * FarmZoom.close
         let atClose = abs(scale - close) < fit.scale * 0.12
@@ -669,6 +896,7 @@ struct FarmScreen: View {
     private func nudgeZoom(_ factor: CGFloat) {
         guard mapSize.width > 1 else { return }
         userMoved = true
+        honorLaunchZoom = false
         let range = zoomRange(in: mapSize)
         let next = min(range.max, max(range.min, scale * factor))
         let focus = CGPoint(x: mapSize.width / 2, y: mapSize.height / 2)
@@ -693,11 +921,12 @@ struct FarmScreen: View {
 
     private var zoomButtons: some View {
         VStack(spacing: 8) {
+            zoomButton("location") { recentre() }
             zoomButton("plus") { nudgeZoom(1.25) }
             zoomButton("minus") { nudgeZoom(1 / 1.25) }
         }
         .padding(.trailing, 12)
-        .padding(.bottom, editing ? 132 : 12)
+        .padding(.bottom, editing ? 168 : 12)
     }
 
     private func zoomButton(_ symbol: String, action: @escaping () -> Void) -> some View {
@@ -717,6 +946,9 @@ struct FarmScreen: View {
         draggingDecor = false
         hover = nil
         hoverValid = false
+        if armedStorage == nil {
+            brushTile = nil
+        }
     }
 
     private func updateChart() {
@@ -728,6 +960,7 @@ struct FarmScreen: View {
         let key = IslandChartCache.cacheKey(seed: seed, level: level, clearing: clearing, blocked: blocked, woods: woods)
         if key == chartKey, !chart.ground.isEmpty { return }
         chartKey = key
+        OrchardTiming.log("chart request level \(level) radius \(String(format: "%.1f", Woodland.radius(level: level))) seed \(seed)")
         Task {
             let next = await IslandChartCache.chart(key: key) {
                 Woodland.make(
@@ -739,9 +972,19 @@ struct FarmScreen: View {
                 )
             }
             guard chartKey == key else { return }
+            let grew = sawChart && next.ground.count > chart.ground.count + 8
             chart = next
-            if DebugLaunch.farmZoom != nil {
+            sawChart = true
+            let shownScale = DebugLaunch.farmZoom ?? fittedCamera(in: mapSize).scale
+            OrchardTiming.log(String(format: "chart apply level %d radius %.1f ground %d shown %.3f", level, Woodland.radius(level: level), next.ground.count, Double(shownScale)))
+            if honorLaunchZoom, DebugLaunch.farmZoom != nil {
                 applyFarmZoom(in: mapSize)
+            } else if !userMoved {
+                framed = false
+                frameHouse(in: mapSize)
+            }
+            if grew {
+                celebrateGrowth()
             }
         }
     }
@@ -749,15 +992,14 @@ struct FarmScreen: View {
     /// `-farmZoom` wins over the saved camera and the fit-to-farm scale.
     private func applyFarmZoom(in viewSize: CGSize) {
         guard let zoom = DebugLaunch.farmZoom, viewSize.width > 1, viewSize.height > 1 else { return }
-        let focus = cameraFitting(occupiedWorldPoints(), in: viewSize, margin: IsoMap.tileWidth)
+        let focus = cameraFitting(focusWorldPoints(), in: viewSize, margin: IsoMap.tileWidth)
         scale = zoom
         lastScale = zoom
         worldCenter = focus.center
         offset = .zero
         lastOffset = .zero
         framed = true
-        userMoved = true
-        OrchardTiming.log("farmZoom \(zoom)")
+        OrchardTiming.log(String(format: "farmZoom %.3f shown %.3f", Double(zoom), Double(zoom)))
     }
 
     private func tile(at location: CGPoint, in viewSize: CGSize) -> FarmTile {
@@ -900,6 +1142,12 @@ struct FarmScreen: View {
                 }
             }
         }
+        let now = Date()
+        for tile in stroke.keys {
+            sparks.append(FarmSpark(kind: .ripple, tile: tile, born: now))
+        }
+        FarmAudio.swish()
+        pruneSparks()
     }
 
     private func canPaint(_ kind: FarmItemKind?, on tile: FarmTile) -> Bool {
@@ -930,11 +1178,18 @@ struct FarmScreen: View {
             }
         }
         let now = Date()
-        puffs.append(contentsOf: tiles.map { LeafPuff(tile: $0, born: now) })
-        Task {
-            try? await Task.sleep(for: .milliseconds(750))
-            puffs.removeAll { Date().timeIntervalSince($0.born) > 0.65 }
+        let sprites = decorRecords.filter { tiles.contains($0.tile) }
+        for item in sprites where Woodland.sprite(item.sprite)?.isTall == true {
+            falling.append(FallingTree(tile: item.tile, sprite: item.sprite, born: now))
         }
+        for tile in tiles {
+            sparks.append(FarmSpark(kind: .leaf, tile: tile, born: now))
+            sparks.append(FarmSpark(kind: .chip, tile: tile, born: now))
+            sparks.append(FarmSpark(kind: .floater, tile: tile, born: now, text: "+1 cleared"))
+        }
+        FarmAudio.chop()
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        pruneSparks()
     }
 
     private func commitDecorStroke() {
@@ -956,6 +1211,13 @@ struct FarmScreen: View {
             ))
         }
         commitDecor(next)
+        let now = Date()
+        for (tile, _) in stroke {
+            sparks.append(FarmSpark(kind: .dust, tile: tile, born: now))
+        }
+        FarmAudio.pop()
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        pruneSparks()
     }
 
     private func deleteSelectedDecor() {
@@ -964,8 +1226,17 @@ struct FarmScreen: View {
         self.selectedDecor = nil
     }
 
+    private func currentSnapshot() -> FarmEditSnapshot {
+        FarmEditSnapshot(
+            records: records,
+            decor: decorRecords,
+            stored: storedItems.map(\.record),
+            skipped: skippedPlants.map(\.varietySlug)
+        )
+    }
+
     private func commitDecor(_ next: [DecorRecord]) {
-        undo.append(FarmEditSnapshot(records: records, decor: decorRecords))
+        undo.append(currentSnapshot())
         try? FarmLayout.writeDecor(next, in: context)
     }
 
@@ -975,7 +1246,7 @@ struct FarmScreen: View {
 
     private func commit(nextDecor: [DecorRecord]?, _ change: (inout [FarmRecord]) -> Void) {
         var next = records
-        undo.append(FarmEditSnapshot(records: next, decor: decorRecords))
+        undo.append(currentSnapshot())
         change(&next)
         try? FarmLayout.write(next, in: context)
         if let nextDecor {
@@ -987,6 +1258,416 @@ struct FarmScreen: View {
         guard let previous = undo.popLast() else { return }
         try? FarmLayout.write(previous.records, in: context)
         try? FarmLayout.writeDecor(previous.decor, in: context)
+        try? FarmLayout.writeStored(previous.stored, in: context)
+        try? FarmLayout.writeSkipped(previous.skipped, in: context)
+        FarmAudio.tick()
+    }
+
+    private var plantKey: String {
+        records.filter { $0.kind == .plant }.map(\.id.uuidString).sorted().joined(separator: "|")
+    }
+
+    private var selectionTile: FarmTile? {
+        if let selectedDecor, let decor = decorRecords.first(where: { $0.id == selectedDecor }) {
+            return dragging == decor.id ? (hover ?? decor.tile) : decor.tile
+        }
+        if let selectedRecord, let record = records.first(where: { $0.id == selectedRecord }) {
+            return dragging == record.id ? (hover ?? record.tile) : record.tile
+        }
+        return nil
+    }
+
+    private var canStoreSelection: Bool {
+        if selectedDecor != nil { return true }
+        guard let selectedRecord, let record = records.first(where: { $0.id == selectedRecord }) else { return false }
+        return record.kind == .plant || record.kind == .bush || record.kind == .rock
+    }
+
+    private var brushGhost: FarmGhost? {
+        if let armedStorage, let item = storedItems.first(where: { $0.id == armedStorage }), let tile = brushTile ?? hover {
+            return FarmGhost(tile: tile, sprite: item.sprite, valid: storageValid(armedStorage, on: tile))
+        }
+        guard editing, tool.isBrush, let brushTile else { return nil }
+        let sprite: String?
+        if case .decor(let name) = tool { sprite = name } else { sprite = nil }
+        let valid: Bool
+        if case .paint(let kind) = tool {
+            valid = canPaint(kind, on: brushTile)
+        } else if tool == .clear {
+            valid = canClear(brushTile)
+        } else {
+            valid = chart.ground.contains(brushTile) && !chart.water.contains(brushTile)
+        }
+        return FarmGhost(tile: brushTile, sprite: sprite, valid: valid)
+    }
+
+    private func brushPoint(in viewSize: CGSize, camera: FarmCamera) -> CGPoint? {
+        guard let tile = brushGhost?.tile else { return nil }
+        return camera.screenPoint(IsoMap.center(tile), in: viewSize)
+    }
+
+    private var storageStacks: [StorageStack] {
+        var grouped: [String: [FarmStoredItem]] = [:]
+        for item in storedItems {
+            let key = "\(item.kindRaw)|\(item.varietySlug ?? "")|\(item.sprite ?? "")"
+            grouped[key, default: []].append(item)
+        }
+        return grouped.map { key, items in
+            let sample = items[0]
+            let title = sample.varietySlug?.replacingOccurrences(of: "-", with: " ")
+                ?? sample.sprite?.replacingOccurrences(of: "_", with: " ")
+                ?? sample.kindRaw
+            let symbol = sample.kindRaw == "plant" ? "leaf" : "archivebox"
+            return StorageStack(
+                id: key,
+                title: title.capitalized,
+                systemImage: symbol,
+                sprite: sample.sprite,
+                count: items.count,
+                sampleID: sample.id
+            )
+        }
+        .sorted { $0.title < $1.title }
+    }
+
+    private func islandScreenSpan(at scale: CGFloat) -> CGFloat {
+        let focus = focusWorldPoints()
+        guard let minX = focus.map(\.x).min(), let maxX = focus.map(\.x).max() else { return 0 }
+        return (maxX - minX) * scale
+    }
+
+    private func toggleEditing() {
+        editing.toggle()
+        FarmAudio.tick()
+        if !editing {
+            tool = .move
+            storageOpen = false
+            clearGesture()
+            selectedDecor = nil
+            selectedRecord = nil
+        }
+    }
+
+    private func selectTool(_ next: FarmTool) {
+        tool = next
+        selectedDecor = nil
+        selectedRecord = nil
+        clearGesture()
+        FarmAudio.tick()
+    }
+
+    private func handleSingleTap(_ point: CGPoint, in viewSize: CGSize) {
+        if suppressTap {
+            suppressTap = false
+            return
+        }
+        if let armedStorage {
+            placeStored(armedStorage, on: tile(at: point, in: viewSize))
+            return
+        }
+        if editing {
+            if let found = hit(at: point, in: viewSize) {
+                beginMove(found)
+                dragging = nil
+                gesture = .undecided
+            } else {
+                selectedDecor = nil
+                selectedRecord = nil
+            }
+            return
+        }
+        guard let slug = plantSlug(at: point, in: viewSize) else { return }
+        if let record = records.first(where: { $0.kind == .plant && $0.varietyID == slug }) {
+            bounces[record.id.uuidString] = Date()
+        }
+        FarmAudio.pop()
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        selected = VarietyLink(id: slug)
+    }
+
+    private func placed(_ id: UUID, on tile: FarmTile) {
+        bounces[id.uuidString] = Date()
+        sparks.append(FarmSpark(kind: .dust, tile: tile, born: Date()))
+        FarmAudio.pop()
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        pruneSparks()
+    }
+
+    private func reject() {
+        UINotificationFeedbackGenerator().notificationOccurred(.error)
+        guard !UIAccessibility.isReduceMotionEnabled else { return }
+        withAnimation(.linear(duration: 0.05)) { shakeOffset = 8 }
+        Task {
+            try? await Task.sleep(for: .milliseconds(50))
+            withAnimation(.linear(duration: 0.05)) { shakeOffset = -7 }
+            try? await Task.sleep(for: .milliseconds(50))
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.5)) { shakeOffset = 0 }
+        }
+    }
+
+    private func pruneSparks() {
+        Task {
+            try? await Task.sleep(for: .milliseconds(1200))
+            let now = Date()
+            sparks.removeAll { now.timeIntervalSince($0.born) > 1.15 }
+            falling.removeAll { !$0.held && now.timeIntervalSince($0.born) > 0.8 }
+        }
+    }
+
+    private func noteNewPlants(_ key: String) {
+        let ids = Set(key.split(separator: "|").map { UUID(uuidString: String($0)) }.compactMap { $0 })
+        defer { knownPlants = ids }
+        guard let knownPlants else { return }
+        let fresh = ids.subtracting(knownPlants)
+        let now = Date()
+        for id in fresh {
+            sprouts[id.uuidString] = now
+            if let tile = records.first(where: { $0.id == id })?.tile {
+                sparks.append(FarmSpark(kind: .sparkle, tile: tile, born: now))
+            }
+        }
+        if !fresh.isEmpty {
+            FarmAudio.pop()
+            pruneSparks()
+        }
+    }
+
+    private func celebrateGrowth() {
+        bannerText = "The island grew"
+        FarmAudio.chime()
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        Task {
+            try? await Task.sleep(for: .milliseconds(1600))
+            bannerText = nil
+        }
+    }
+
+    private func recentre() {
+        guard mapSize.width > 1 else { return }
+        honorLaunchZoom = false
+        userMoved = true
+        let fitted = fittedCamera(in: mapSize)
+        withAnimation(UIAccessibility.isReduceMotionEnabled ? nil : .spring(response: 0.45, dampingFraction: 0.86)) {
+            scale = fitted.scale
+            lastScale = fitted.scale
+            worldCenter = fitted.center
+            offset = .zero
+            lastOffset = .zero
+            framed = true
+        }
+        saveCamera(scale: fitted.scale, center: fitted.center, pan: .zero)
+        FarmAudio.tick()
+    }
+
+    private func flipSelected() {
+        guard let selectedDecor else { return }
+        var next = decorRecords
+        guard let index = next.firstIndex(where: { $0.id == selectedDecor }) else { return }
+        next[index].flipped.toggle()
+        commitDecor(next)
+        FarmAudio.tick()
+    }
+
+    private func rotateSelected() {
+        guard let selectedDecor else { return }
+        var next = decorRecords
+        guard let index = next.firstIndex(where: { $0.id == selectedDecor }) else { return }
+        next[index].rotation += .pi / 12
+        commitDecor(next)
+        FarmAudio.tick()
+    }
+
+    private func storeSelection() {
+        if let selectedDecor, let decor = decorRecords.first(where: { $0.id == selectedDecor }) {
+            var stored = storedItems.map(\.record)
+            stored.append(StoredRecord(
+                id: UUID(),
+                kind: .bush,
+                varietyID: nil,
+                sprite: decor.sprite,
+                scale: decor.scale,
+                flipped: decor.flipped,
+                rotation: decor.rotation
+            ))
+            undo.append(currentSnapshot())
+            try? FarmLayout.writeDecor(decorRecords.filter { $0.id != decor.id }, in: context)
+            try? FarmLayout.writeStored(stored, in: context)
+            self.selectedDecor = nil
+            FarmAudio.pop()
+            return
+        }
+        guard let selectedRecord, let record = records.first(where: { $0.id == selectedRecord }) else { return }
+        guard record.kind == .plant || record.kind == .bush || record.kind == .rock else {
+            reject()
+            return
+        }
+        var stored = storedItems.map(\.record)
+        stored.append(StoredRecord(
+            id: UUID(),
+            kind: record.kind,
+            varietyID: record.varietyID,
+            sprite: nil,
+            scale: 1,
+            flipped: false,
+            rotation: 0
+        ))
+        undo.append(currentSnapshot())
+        var next = records
+        next.removeAll { $0.id == record.id }
+        try? FarmLayout.write(next, in: context)
+        try? FarmLayout.writeStored(stored, in: context)
+        self.selectedRecord = nil
+        FarmAudio.pop()
+    }
+
+    private func deleteSelection() {
+        if let selectedDecor, let decor = decorRecords.first(where: { $0.id == selectedDecor }) {
+            commitDecor(decorRecords.filter { $0.id != decor.id })
+            self.selectedDecor = nil
+            FarmAudio.tick()
+            return
+        }
+        guard let selectedRecord, let record = records.first(where: { $0.id == selectedRecord }) else { return }
+        if record.kind == .plant {
+            deletePlant = record
+            return
+        }
+        performDelete(record)
+    }
+
+    private func performDelete(_ record: FarmRecord) {
+        var next = records
+        next.removeAll { $0.id == record.id }
+        var skipped = skippedPlants.map(\.varietySlug)
+        if record.kind == .plant, let slug = record.varietyID, !skipped.contains(slug) {
+            skipped.append(slug)
+        }
+        undo.append(currentSnapshot())
+        try? FarmLayout.write(next, in: context)
+        try? FarmLayout.writeSkipped(skipped, in: context)
+        if selectedRecord == record.id { selectedRecord = nil }
+        FarmAudio.tick()
+    }
+
+    private func storageValid(_ id: UUID, on tile: FarmTile) -> Bool {
+        guard let item = storedItems.first(where: { $0.id == id }) else { return false }
+        if let sprite = item.sprite, item.varietySlug == nil {
+            let house = records.first { $0.kind == .house }.map { FarmExpansion.footprint(kind: .house, anchor: $0.tile) } ?? []
+            return chart.ground.contains(tile) && !chart.water.contains(tile) && !house.contains(tile)
+                && !decorRecords.contains { $0.tile == tile }
+        }
+        var occupied = Set(records.filter { !$0.kind.isTerrain && $0.kind != .cleared }.map(\.tile))
+        let spot = item.varietySlug.flatMap { plants[$0] }.map { FarmExpansion.spotKind(zone: $0.zone) }
+        return FarmExpansion.canPlace(
+            kind: item.record.kind,
+            spot: spot,
+            on: tile,
+            tastedCount: tastedCount,
+            occupied: occupied,
+            reserved: FarmExpansion.reservedTiles(in: records),
+            plan: yardPlan,
+            water: chart.water,
+            creek: chart.creek,
+            openTiles: Set(openTiles)
+        )
+    }
+
+    private func placeStored(_ id: UUID, on tile: FarmTile) {
+        guard storageValid(id, on: tile), let item = storedItems.first(where: { $0.id == id }) else {
+            reject()
+            return
+        }
+        undo.append(currentSnapshot())
+        var stored = storedItems.map(\.record)
+        stored.removeAll { $0.id == id }
+        try? FarmLayout.writeStored(stored, in: context)
+        if let sprite = item.sprite, item.varietySlug == nil {
+            var next = decorRecords
+            let placedDecor = DecorRecord(
+                id: UUID(),
+                sprite: sprite,
+                tile: tile,
+                scale: item.scale,
+                flipped: item.flipped,
+                rotation: item.rotation,
+                origin: "placed"
+            )
+            next.append(placedDecor)
+            try? FarmLayout.writeDecor(next, in: context)
+            bounces[placedDecor.id.uuidString] = Date()
+        } else {
+            let record = FarmRecord(id: UUID(), kind: item.record.kind, varietyID: item.varietySlug, tile: tile)
+            var next = records
+            next.append(record)
+            if record.kind == .plant, let slug = record.varietyID {
+                var skipped = skippedPlants.map(\.varietySlug)
+                skipped.removeAll { $0 == slug }
+                try? FarmLayout.writeSkipped(skipped, in: context)
+            }
+            try? FarmLayout.write(next, in: context)
+            bounces[record.id.uuidString] = Date()
+        }
+        sparks.append(FarmSpark(kind: .dust, tile: tile, born: Date()))
+        armedStorage = nil
+        brushTile = nil
+        FarmAudio.pop()
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        pruneSparks()
+    }
+
+    private func applyDebugChrome() {
+        if DebugLaunch.editSelection || DebugLaunch.axeClear || DebugLaunch.showStorage {
+            editing = true
+        }
+        if DebugLaunch.axeClear {
+            tool = .clear
+            if falling.isEmpty, let tree = decorRecords.first(where: { Woodland.sprite($0.sprite)?.isTall == true }) {
+                falling.append(FallingTree(tile: tree.tile, sprite: tree.sprite, born: Date().addingTimeInterval(-0.32), held: true))
+                sparks.append(FarmSpark(kind: .chip, tile: tree.tile, born: Date().addingTimeInterval(-0.2)))
+                sparks.append(FarmSpark(kind: .floater, tile: tree.tile, born: Date().addingTimeInterval(-0.2), text: "+1 cleared"))
+            }
+        }
+        if DebugLaunch.showStorage {
+            storageOpen = true
+            seedDebugStorageIfNeeded()
+        }
+        if DebugLaunch.editSelection, selectedRecord == nil, selectedDecor == nil {
+            if let plant = records.first(where: { $0.kind == .plant }) {
+                selectedRecord = plant.id
+            } else if let decor = decorRecords.first {
+                selectedDecor = decor.id
+            }
+        }
+    }
+
+    private func seedDebugStorageIfNeeded() {
+        guard !seededStorage else { return }
+        seededStorage = true
+        guard storedItems.isEmpty else { return }
+        let samples = [
+            StoredRecord(id: UUID(), kind: .bush, varietyID: nil, sprite: "bush_a", scale: 1, flipped: false, rotation: 0),
+            StoredRecord(id: UUID(), kind: .rock, varietyID: nil, sprite: "rock_medium_a", scale: 1, flipped: false, rotation: 0)
+        ]
+        try? FarmLayout.writeStored(samples, in: context)
+    }
+
+    /// The whole island, plus a margin of ocean, once the chart exists. Before that, the yard.
+    private func focusWorldPoints() -> [CGPoint] {
+        let columns = chart.ground.map(\.column)
+        let rows = chart.ground.map(\.row)
+        let clearingCount = FarmExpansion.clearingTiles(for: yardPlan).count
+        if chart.ground.count > clearingCount + 20,
+           let minColumn = columns.min(), let maxColumn = columns.max(),
+           let minRow = rows.min(), let maxRow = rows.max() {
+            let margin = 3
+            return [
+                FarmTile(column: minColumn - margin, row: minRow - margin),
+                FarmTile(column: maxColumn + margin, row: minRow - margin),
+                FarmTile(column: maxColumn + margin, row: maxRow + margin),
+                FarmTile(column: minColumn - margin, row: maxRow + margin)
+            ].map { IsoMap.center($0) }
+        }
+        return occupiedWorldPoints()
     }
 
     /// Placed sprites and painted cells, the yard that should fill the opening view.
@@ -1067,7 +1748,7 @@ struct FarmScreen: View {
     }
 
     private func fittedCamera(in viewSize: CGSize) -> FarmCamera {
-        cameraFitting(occupiedWorldPoints(), in: viewSize, margin: IsoMap.tileWidth)
+        cameraFitting(focusWorldPoints(), in: viewSize, margin: IsoMap.tileWidth)
     }
 
     /// Zoom at which every unlockable plot fits on screen.
@@ -1092,10 +1773,12 @@ struct FarmScreen: View {
               let maxX = focus.map(\.x).max(),
               let minY = focus.map(\.y).min(),
               let maxY = focus.map(\.y).max() else {
-            return FarmCamera(scale: DebugLaunch.farmZoom ?? 1, center: .zero, pan: .zero)
+            return FarmCamera(scale: 1, center: .zero, pan: .zero)
         }
-        let span = max(maxX - minX, 1) + margin * 2
-        let fitted = DebugLaunch.farmZoom ?? min(FarmZoom.maximum, (viewSize.width * 0.90) / span)
+        let spanX = max(maxX - minX, 1) + margin * 2
+        let spanY = max(maxY - minY, 1) + margin
+        let height = max(viewSize.height - 160, 1)
+        let fitted = min(FarmZoom.maximum, min((viewSize.width * 0.88) / spanX, (height * 0.88) / spanY))
         let center = CGPoint(x: (minX + maxX) / 2, y: (minY + maxY) / 2)
         return FarmCamera(scale: fitted, center: center, pan: .zero)
     }
@@ -1113,6 +1796,7 @@ struct FarmScreen: View {
         worldCenter = fitted.center
         offset = .zero
         lastOffset = .zero
+        OrchardTiming.log(String(format: "fit scale %.3f level %d ground %d", Double(fitted.scale), islandLevel, chart.ground.count))
     }
 }
 
@@ -1121,6 +1805,7 @@ private struct MapGestureOverlay: UIViewRepresentable {
     var onPinch: (CGFloat, CGPoint, UIGestureRecognizer.State) -> Void
     var onTwoPan: (CGSize, UIGestureRecognizer.State) -> Void
     var onOnePan: (CGPoint, CGPoint, CGSize, UIGestureRecognizer.State) -> Void
+    var onLongPress: (CGPoint, UIGestureRecognizer.State) -> Void
     var onDoubleTap: (CGPoint) -> Void
     var onSingleTap: (CGPoint) -> Void
 
@@ -1139,6 +1824,10 @@ private struct MapGestureOverlay: UIViewRepresentable {
         let one = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.onePan(_:)))
         one.minimumNumberOfTouches = 1
         one.maximumNumberOfTouches = 1
+        let hold = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.hold(_:)))
+        hold.minimumPressDuration = 0.4
+        hold.allowableMovement = 18
+        hold.delegate = context.coordinator
         let doubleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.doubleTap(_:)))
         doubleTap.numberOfTapsRequired = 2
         let singleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.singleTap(_:)))
@@ -1150,6 +1839,7 @@ private struct MapGestureOverlay: UIViewRepresentable {
         view.addGestureRecognizer(pinch)
         view.addGestureRecognizer(two)
         view.addGestureRecognizer(one)
+        view.addGestureRecognizer(hold)
         view.addGestureRecognizer(doubleTap)
         view.addGestureRecognizer(singleTap)
         return view
@@ -1196,6 +1886,10 @@ private struct MapGestureOverlay: UIViewRepresentable {
             if gesture.state == .ended || gesture.state == .cancelled || gesture.state == .failed {
                 oneStart = nil
             }
+        }
+
+        @objc func hold(_ gesture: UILongPressGestureRecognizer) {
+            parent.onLongPress(gesture.location(in: gesture.view), gesture.state)
         }
 
         @objc func doubleTap(_ gesture: UITapGestureRecognizer) {

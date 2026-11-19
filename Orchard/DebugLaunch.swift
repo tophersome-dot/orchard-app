@@ -80,6 +80,42 @@ enum DebugLaunch {
         return nil
     }
 
+    /// Opens edit mode with the storage tray visible.
+    static var showStorage: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-showStorage")
+        #else
+        false
+        #endif
+    }
+
+    /// Opens edit mode with a plant selected.
+    static var editSelection: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-editSelection")
+        #else
+        false
+        #endif
+    }
+
+    /// Opens the axe with a tree frozen mid-fall.
+    static var axeClear: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-axeClear")
+        #else
+        false
+        #endif
+    }
+
+    /// Shows the first-run hint bubbles even if they were dismissed.
+    static var showHints: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-showHints")
+        #else
+        false
+        #endif
+    }
+
     static var initialTab: AppTab {
         #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments

@@ -17,6 +17,9 @@
 		C5212B30FB5B3DBE1CD176D9 /* FarmExpansion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66738E900A93B778F351BA6C /* FarmExpansion.swift */; };
 		F9574A32694E793E13F51E91 /* FarmLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAA960907143914C1BED6996 /* FarmLayout.swift */; };
 		F11E5A0D1C0DE411AB10F002 /* Woodland.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5A0D1C0DE411AB10F001 /* Woodland.swift */; };
+		A1F0A0D10C0DE411AB10F0A2 /* FarmAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0A0D10C0DE411AB10F0A1 /* FarmAudio.swift */; };
+		A1F0A0D10C0DE411AB10F0B2 /* FarmChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0A0D10C0DE411AB10F0B1 /* FarmChrome.swift */; };
+		A1F0A0D10C0DE411AB10F0C2 /* FarmJuice.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0A0D10C0DE411AB10F0C1 /* FarmJuice.swift */; };
 		F11E5A0D1C0DE411AB10F004 /* WoodlandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5A0D1C0DE411AB10F003 /* WoodlandTests.swift */; };
 		24E20FBEEA2D33599D1963B0 /* FarmSprites.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B035B08283F786F17DC70E9 /* FarmSprites.swift */; };
 		608E3BC1B2DBEF1505A800E0 /* HouseProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB9E691E9D6A28E9CC779FA6 /* HouseProgress.swift */; };
@@ -78,6 +81,9 @@
 		66738E900A93B778F351BA6C /* FarmExpansion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarmExpansion.swift; sourceTree = "<group>"; };
 		CAA960907143914C1BED6996 /* FarmLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarmLayout.swift; sourceTree = "<group>"; };
 		F11E5A0D1C0DE411AB10F001 /* Woodland.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Woodland.swift; sourceTree = "<group>"; };
+		A1F0A0D10C0DE411AB10F0A1 /* FarmAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarmAudio.swift; sourceTree = "<group>"; };
+		A1F0A0D10C0DE411AB10F0B1 /* FarmChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarmChrome.swift; sourceTree = "<group>"; };
+		A1F0A0D10C0DE411AB10F0C1 /* FarmJuice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarmJuice.swift; sourceTree = "<group>"; };
 		F11E5A0D1C0DE411AB10F003 /* WoodlandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WoodlandTests.swift; sourceTree = "<group>"; };
 		7B035B08283F786F17DC70E9 /* FarmSprites.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarmSprites.swift; sourceTree = "<group>"; };
 		AB9E691E9D6A28E9CC779FA6 /* HouseProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseProgress.swift; sourceTree = "<group>"; };
@@ -183,6 +189,7 @@
 				66738E900A93B778F351BA6C /* FarmExpansion.swift */,
 				CAA960907143914C1BED6996 /* FarmLayout.swift */,
 				F11E5A0D1C0DE411AB10F001 /* Woodland.swift */,
+				A1F0A0D10C0DE411AB10F0A1 /* FarmAudio.swift */,
 				7B035B08283F786F17DC70E9 /* FarmSprites.swift */,
 				AB9E691E9D6A28E9CC779FA6 /* HouseProgress.swift */,
 				FA149C70F737A917352363FE /* IsoMap.swift */,
@@ -282,6 +289,8 @@
 			children = (
 				08140476BB8B27114AD24CC5 /* FarmMapView.swift */,
 				3807307B9187D13CE8DE16D9 /* FarmScreen.swift */,
+				A1F0A0D10C0DE411AB10F0B1 /* FarmChrome.swift */,
+				A1F0A0D10C0DE411AB10F0C1 /* FarmJuice.swift */,
 			);
 			path = Farm;
 			sourceTree = "<group>";
@@ -459,6 +468,9 @@
 				C5212B30FB5B3DBE1CD176D9 /* FarmExpansion.swift in Sources */,
 				F9574A32694E793E13F51E91 /* FarmLayout.swift in Sources */,
 				F11E5A0D1C0DE411AB10F002 /* Woodland.swift in Sources */,
+				A1F0A0D10C0DE411AB10F0A2 /* FarmAudio.swift in Sources */,
+				A1F0A0D10C0DE411AB10F0B2 /* FarmChrome.swift in Sources */,
+				A1F0A0D10C0DE411AB10F0C2 /* FarmJuice.swift in Sources */,
 				24E20FBEEA2D33599D1963B0 /* FarmSprites.swift in Sources */,
 				608E3BC1B2DBEF1505A800E0 /* HouseProgress.swift in Sources */,
 				45E8AEBE8AB456F3EFEC1F75 /* IsoMap.swift in Sources */,

@@ -50,6 +50,84 @@ struct FarmGridEdge: Hashable {
     var groundY: CGFloat { (anchor.y + end.y) / 2 }
 }
 
+/// Rounds a closed cell outline so a staircase of tile corners becomes a soft coast.
+enum ShoreOutline {
+    /// Cuts each sharp corner by about half an edge, twice, then eases the chamfer.
+    static func round(_ points: [CGPoint]) -> [CGPoint] {
+        let first = chopCorners(points, fraction: 0.46)
+        let second = chopCorners(first, fraction: 0.32)
+        return chaikin(second, passes: 2, weight: 0.25)
+    }
+
+    /// Fewer points, for textured bands. The clip path keeps the full rounded loop.
+    static func sample(_ points: [CGPoint], spacing: CGFloat) -> [CGPoint] {
+        guard points.count >= 3, spacing > 1 else { return points }
+        var result: [CGPoint] = [points[0]]
+        var travelled: CGFloat = 0
+        var nextMark = spacing
+        for index in points.indices {
+            let start = points[index]
+            let end = points[(index + 1) % points.count]
+            let length = hypot(end.x - start.x, end.y - start.y)
+            if length < 0.01 { continue }
+            while nextMark <= travelled + length {
+                let t = (nextMark - travelled) / length
+                result.append(CGPoint(x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t))
+                nextMark += spacing
+            }
+            travelled += length
+        }
+        return result.count >= 3 ? result : points
+    }
+
+    private static func chopCorners(_ points: [CGPoint], fraction: CGFloat) -> [CGPoint] {
+        guard points.count >= 3 else { return points }
+        let cut = min(max(fraction, 0.05), 0.49)
+        var next: [CGPoint] = []
+        next.reserveCapacity(points.count * 2)
+        for index in points.indices {
+            let previous = points[(index + points.count - 1) % points.count]
+            let current = points[index]
+            let following = points[(index + 1) % points.count]
+            let inX = current.x - previous.x
+            let inY = current.y - previous.y
+            let outX = following.x - current.x
+            let outY = following.y - current.y
+            let inLen = max(hypot(inX, inY), 0.001)
+            let outLen = max(hypot(outX, outY), 0.001)
+            let dot = (inX / inLen) * (outX / outLen) + (inY / inLen) * (outY / outLen)
+            if dot > 0.94 {
+                next.append(current)
+                continue
+            }
+            let takeIn = inLen * cut
+            let takeOut = outLen * cut
+            next.append(CGPoint(x: current.x - (inX / inLen) * takeIn, y: current.y - (inY / inLen) * takeIn))
+            next.append(CGPoint(x: current.x + (outX / outLen) * takeOut, y: current.y + (outY / outLen) * takeOut))
+        }
+        return next
+    }
+
+    private static func chaikin(_ points: [CGPoint], passes: Int, weight: CGFloat) -> [CGPoint] {
+        var pts = points
+        let keep = min(max(weight, 0.05), 0.45)
+        let take = 1 - keep
+        for _ in 0..<passes {
+            guard pts.count >= 3 else { return pts }
+            var next: [CGPoint] = []
+            next.reserveCapacity(pts.count * 2)
+            for index in pts.indices {
+                let current = pts[index]
+                let following = pts[(index + 1) % pts.count]
+                next.append(CGPoint(x: current.x * take + following.x * keep, y: current.y * take + following.y * keep))
+                next.append(CGPoint(x: current.x * keep + following.x * take, y: current.y * keep + following.y * take))
+            }
+            pts = next
+        }
+        return pts
+    }
+}
+
 enum FarmSurface {
     /// The outer edge of each fence tile, chosen so a rectangular run shares posts.
     static func fenceEdges(in records: [FarmRecord]) -> [FarmGridEdge] {

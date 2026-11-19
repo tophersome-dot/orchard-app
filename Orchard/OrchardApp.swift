@@ -23,7 +23,9 @@ enum OrchardStore {
                 HuntItem.self,
                 FarmPlacement.self,
                 FarmDecor.self,
-                FarmWorld.self
+                FarmWorld.self,
+                FarmStoredItem.self,
+                FarmSkippedPlant.self
             )
         } catch {
             fatalError("Could not open the Orchard store: \(error)")

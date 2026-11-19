@@ -10,7 +10,8 @@ enum FarmLayout {
         let records = existing.map(\.record)
         let tastedCount = Set(tried.map(\.id)).count
         let open = records.filter { $0.kind == .cleared }.map(\.tile)
-        let next = FarmExpansion.reconciled(records, tried: tried, tastedCount: tastedCount, openTiles: open)
+        let parked = try parkedVarietyIDs(in: context)
+        let next = FarmExpansion.reconciled(records, tried: tried, tastedCount: tastedCount, openTiles: open, parked: parked)
         if next != records {
             try write(next, replacing: existing, in: context)
         }
@@ -106,9 +107,24 @@ enum FarmLayout {
             changed = insertTerrain(chart.groves, kind: .forest, existing: forestTiles, blocked: claimed.union(clearing).union(cleared), in: context) || changed
             changed = insertTerrain(chart.glades, kind: .longgrass, existing: longgrassTiles, blocked: claimed, in: context) || changed
             changed = insertTerrain(chart.dirt, kind: .dirt, existing: dirtTiles, blocked: claimed, in: context) || changed
-            for item in placements where item.record.kind == .forest {
+            for item in placements {
                 let tile = FarmTile(column: item.column, row: item.row)
-                if !chart.groves.contains(tile) || clearing.contains(tile) {
+                let drop: Bool
+                switch item.record.kind {
+                case .forest:
+                    drop = !chart.groves.contains(tile) || clearing.contains(tile)
+                case .lake:
+                    drop = !chart.lakes.contains(tile)
+                case .creek:
+                    drop = !chart.creek.contains(tile)
+                case .longgrass:
+                    drop = !clearing.contains(tile) && !chart.glades.contains(tile)
+                case .dirt:
+                    drop = !clearing.contains(tile) && !chart.dirt.contains(tile)
+                default:
+                    drop = false
+                }
+                if drop {
                     context.delete(item)
                     changed = true
                 }
@@ -197,6 +213,66 @@ enum FarmLayout {
             context.delete(item)
         }
         world.builtLevel = 0
+        try context.save()
+    }
+
+    @MainActor
+    static func parkedVarietyIDs(in context: ModelContext) throws -> Set<String> {
+        let stored = try context.fetch(FetchDescriptor<FarmStoredItem>())
+        let skipped = try context.fetch(FetchDescriptor<FarmSkippedPlant>())
+        return Set(stored.compactMap(\.varietySlug)).union(skipped.map(\.varietySlug))
+    }
+
+    @MainActor
+    static func writeStored(_ items: [StoredRecord], in context: ModelContext) throws {
+        let existing = try context.fetch(FetchDescriptor<FarmStoredItem>())
+        var byID: [UUID: FarmStoredItem] = [:]
+        for item in existing {
+            byID[item.id] = item
+        }
+        var keep = Set<UUID>()
+        for record in items {
+            keep.insert(record.id)
+            if let stored = byID[record.id] {
+                stored.kindRaw = record.kind.rawValue
+                stored.varietySlug = record.varietyID
+                stored.sprite = record.sprite
+                stored.scale = record.scale
+                stored.flipped = record.flipped
+                stored.rotation = record.rotation
+            } else {
+                context.insert(FarmStoredItem(
+                    id: record.id,
+                    kindRaw: record.kind.rawValue,
+                    varietySlug: record.varietyID,
+                    sprite: record.sprite,
+                    scale: record.scale,
+                    flipped: record.flipped,
+                    rotation: record.rotation
+                ))
+            }
+        }
+        for item in existing where !keep.contains(item.id) {
+            context.delete(item)
+        }
+        try context.save()
+    }
+
+    @MainActor
+    static func writeSkipped(_ slugs: [String], in context: ModelContext) throws {
+        let existing = try context.fetch(FetchDescriptor<FarmSkippedPlant>())
+        let wanted = Set(slugs)
+        var seen = Set<String>()
+        for item in existing {
+            if wanted.contains(item.varietySlug), !seen.contains(item.varietySlug) {
+                seen.insert(item.varietySlug)
+            } else {
+                context.delete(item)
+            }
+        }
+        for slug in wanted where !seen.contains(slug) {
+            context.insert(FarmSkippedPlant(varietySlug: slug))
+        }
         try context.save()
     }
 
