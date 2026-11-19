@@ -1,0 +1,1341 @@
+{
+  "version": 1,
+  "about": "Seed catalogue for Orchard. Apple records are only varieties with a source for commercial sale or production in Australia. The list is not padded or trimmed to a round number. Hex colours are painting values chosen to match a written description, not spectrometer readings. PLU codes are the 4-digit IFPS-style numbers reproduced in trade reference tables (JA Technology Solutions PLU quick reference and plu.pro) and were not re-queried one by one on ifpsglobal.com. Organic 9-prefixes are omitted. factStatus verified means the fact sentence is supported by the listed sources. unverified means a source was read but a detail is disputed or incomplete. none means no fact is claimed. Empty regions or season months were left empty on purpose.",
+  "varieties": [
+    {
+      "id": "granny-smith",
+      "name": "Granny Smith",
+      "aliases": [],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [
+        "4017",
+        "4018",
+        "4138",
+        "4139"
+      ],
+      "skin": {
+        "base": "#7ED13A",
+        "blush": "#7ED13A",
+        "pattern": "solid",
+        "blushAmount": 0,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "APAL's exporter directory calls it a unique bright green apple.",
+      "regions": [],
+      "seasonMonths": [],
+      "seasonKind": "unspecified",
+      "seasonNote": "NSW DPI's Cripps Pink Agfact says Cripps Pink is picked 1–2 weeks after Granny Smith, and puts Cripps Pink at early to mid May. A standalone Granny Smith calendar was not quoted. APAL says cold storage keeps major varieties on sale past harvest.",
+      "whereToFind": "One of the most popular Australian apples. Sold in supermarkets; storage extends the retail season.",
+      "fact": "APAL records that Granny Smith originated in 1868 from a chance seedling propagated by Maria Ann Smith in Eastwood, NSW.",
+      "factStatus": "verified",
+      "sources": [
+        "https://apal.org.au/consumer/varieties/",
+        "https://apal.org.au/wp-content/uploads/2020/06/APAL-Exporter-Directory-230418-v1.pdf",
+        "https://www.dpi.nsw.gov.au/agriculture/horticulture/pomes/apples/varieties/cripps-pink"
+      ]
+    },
+    {
+      "id": "pink-lady",
+      "name": "Pink Lady",
+      "aliases": [
+        "Cripps Pink",
+        "Rosy Glow"
+      ],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [
+        "4128",
+        "4130"
+      ],
+      "skin": {
+        "base": "#F2D44A",
+        "blush": "#E23B5A",
+        "pattern": "blush",
+        "blushAmount": 0.68,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "NSW DPI Agfact: pink-red with a yellow base colour. APAL notes Rosy Glow is sold domestically as Pink Lady.",
+      "regions": [],
+      "seasonMonths": [
+        5
+      ],
+      "seasonKind": "harvest",
+      "seasonNote": "NSW DPI Agfact: early to mid May, 1–2 weeks after Granny Smith, picked as the base colour turns from green to yellow. APAL says Cripps Pink is a late variety, with harvest wrapping up around May, and that cold storage extends retail sales.",
+      "whereToFind": "Major Australian supermarkets. Only fruit that meets the brand standard is sold as Pink Lady.",
+      "fact": "Bred by John Cripps at Stoneville Research Station, Western Australia, in 1973, from Golden Delicious crossed with Lady Williams. DPIRD calls Cripps Pink the variety branded as Pink Lady.",
+      "factStatus": "verified",
+      "sources": [
+        "https://www.dpi.nsw.gov.au/agriculture/horticulture/pomes/apples/varieties/cripps-pink",
+        "https://apal.org.au/consumer/varieties/",
+        "https://www.agric.wa.gov.au/news/media-releases/vale-john-cripps-father-pink-lady%C2%AE-apple",
+        "https://apal.org.au/vale-ashley-mason-apple-grower-and-gentleman/"
+      ]
+    },
+    {
+      "id": "sundowner",
+      "name": "Sundowner",
+      "aliases": [
+        "Cripps Red",
+        "Joya"
+      ],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [
+        "3010",
+        "3301"
+      ],
+      "skin": {
+        "base": "#C5D15A",
+        "blush": "#C4282E",
+        "pattern": "stripe",
+        "blushAmount": 0.72,
+        "lenticels": true
+      },
+      "skinVerified": true,
+      "skinNote": "NSW DPI: red with characteristic white lenticel spots. The US plant patent describes a streaked red over-colour on a yellow-green background. The 1993 WA journal says the fruit is mainly dark red with pronounced lenticels, and shaded fruit may be mainly green.",
+      "regions": [],
+      "seasonMonths": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        1,
+        2,
+        3
+      ],
+      "seasonKind": "retail",
+      "seasonNote": "Woolworths lists Sundowner in season July–March. NSW DPI says harvest is late May to early June, about three weeks after Cripps Pink. Joya is the European brand name for Cripps Red, not a different apple.",
+      "whereToFind": "Australian supermarkets. Woolworths lists a July–March retail season.",
+      "fact": "Cripps Red was bred by John Cripps in 1973 at Stoneville, Western Australia, from Golden Delicious × Lady Williams, the same cross as Cripps Pink. It is marketed as Sundowner in most places and Joya in Europe.",
+      "factStatus": "verified",
+      "sources": [
+        "https://www.dpi.nsw.gov.au/agriculture/horticulture/pomes/apples/varieties/cripps-red",
+        "https://www.dpird.wa.gov.au/research/research-areas/horticulture-research/apple-breeding-program/",
+        "https://patents.google.com/patent/USPP8477P/en",
+        "https://library.dpird.wa.gov.au/cgi/viewcontent.cgi?article=1434&context=journal_agriculture4",
+        "https://www.woolworths.com.au/shop/explore/fruit-veg/guides/apples"
+      ]
+    },
+    {
+      "id": "bravo",
+      "name": "Bravo",
+      "aliases": [
+        "ANABP 01"
+      ],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [],
+      "skin": {
+        "base": "#6E1A38",
+        "blush": "#8E2438",
+        "pattern": "solid",
+        "blushAmount": 0.15,
+        "lenticels": true
+      },
+      "skinVerified": true,
+      "skinNote": "DPIRD and Fruit West describe a striking deep burgundy or dark purple-red skin with prominent lenticels and creamy white flesh. Only fruit that meets the specification is sold as Bravo.",
+      "regions": [
+        "Pemberton, WA",
+        "Manjimup, WA",
+        "Kirup, WA",
+        "Nannup, WA",
+        "Donnybrook, WA",
+        "Newlands, WA",
+        "Karragullen, WA",
+        "Arthur's Creek, VIC",
+        "Officer, VIC",
+        "Invergordon, VIC",
+        "Shepparton, VIC",
+        "Orange, NSW",
+        "Batlow, NSW",
+        "Stanthorpe, QLD",
+        "Adelaide Hills, SA"
+      ],
+      "seasonMonths": [
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        1
+      ],
+      "seasonKind": "retail",
+      "seasonNote": "Woolworths lists Bravo in season April–January. Fruit West says Manjimup harvest is around early to mid April, about 21 days before Cripps Pink, with stored fruit eaten from May to October. The region list is the one printed in the 2020 Fruit West good practice guide.",
+      "whereToFind": "Australian supermarkets under the Bravo brand when the fruit meets the quality specification.",
+      "fact": "ANABP 01 was bred by DPIRD in Western Australia from a 1992 cross of Cripps Red and Royal Gala at Stoneville, then developed at Manjimup. The variety is owned by the Western Australian Agriculture Authority and commercialised by Fruit West.",
+      "factStatus": "verified",
+      "sources": [
+        "https://www.agric.wa.gov.au/new-generation-burgundy-coloured-apple-bravo%E2%84%A2",
+        "https://www.dpird.wa.gov.au/research/research-areas/horticulture-research/apple-breeding-program/",
+        "https://www.fruitwest.com.au/index_htm_files/Fruit%20West%20-%20Bravo%20Apple%20Good%20Practice%20Guide%202020.pdf",
+        "https://www.fruitwest.com.au/index_htm_files/31-01-17%20ANABP%2001%20Technical%20Dossier%20Final.pdf",
+        "https://www.woolworths.com.au/shop/explore/fruit-veg/guides/apples"
+      ]
+    },
+    {
+      "id": "royal-gala",
+      "name": "Royal Gala",
+      "aliases": [
+        "Gala"
+      ],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [
+        "4132",
+        "4133",
+        "4134",
+        "4135",
+        "4173",
+        "4174"
+      ],
+      "skin": {
+        "base": "#F6E7B0",
+        "blush": "#E2582A",
+        "pattern": "stripe",
+        "blushAmount": 0.62,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "APAL's exporter directory: pink to red stripes. The 1993 WA agriculture journal says Gala has partial pink-orange stripes on a cream background, and that Royal Gala is a more highly coloured mutation of Gala.",
+      "regions": [],
+      "seasonMonths": [
+        1,
+        2
+      ],
+      "seasonKind": "harvest",
+      "seasonNote": "APAL says the southern-hemisphere harvest begins in January with early varieties such as Royal Gala. The 1993 WA journal says Gala ripens in February and Royal Gala a week to 10 days later. Retail sales run longer than harvest.",
+      "whereToFind": "One of Australia's most popular apples, stocked by major supermarkets.",
+      "fact": "APAL names Gala among the varieties that have dominated Australian orchards, alongside Cripps Pink and Granny Smith. Royal Gala is a more highly coloured mutation of Gala.",
+      "factStatus": "verified",
+      "sources": [
+        "https://apal.org.au/consumer/varieties/",
+        "https://apal.org.au/wp-content/uploads/2020/06/APAL-Exporter-Directory-230418-v1.pdf",
+        "https://library.dpird.wa.gov.au/cgi/viewcontent.cgi?article=1434&context=journal_agriculture4"
+      ]
+    },
+    {
+      "id": "fuji",
+      "name": "Fuji",
+      "aliases": [
+        "Red Fuji"
+      ],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [
+        "4129",
+        "4131"
+      ],
+      "skin": {
+        "base": "#E7D56A",
+        "blush": "#D64556",
+        "pattern": "blush",
+        "blushAmount": 0.58,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "APAL's exporter directory: a red/pink blush. The 1993 WA journal describes Red Fuji as a dull red mutation of Fuji. Ground colour is a drawing choice.",
+      "regions": [],
+      "seasonMonths": [],
+      "seasonKind": "unspecified",
+      "seasonNote": "A variety-specific Australian harvest calendar was not quoted. APAL says cold storage extends the retail season of the main varieties.",
+      "whereToFind": "Widely sold in Australian supermarkets. APAL names Fuji among the most popular apples grown here.",
+      "fact": "APAL names Fuji among Australia's most popular apples and describes the local crop as firm, crisp and juicy with a red/pink blush.",
+      "factStatus": "verified",
+      "sources": [
+        "https://apal.org.au/consumer/varieties/",
+        "https://apal.org.au/wp-content/uploads/2020/06/APAL-Exporter-Directory-230418-v1.pdf",
+        "https://library.dpird.wa.gov.au/cgi/viewcontent.cgi?article=1434&context=journal_agriculture4"
+      ]
+    },
+    {
+      "id": "red-delicious",
+      "name": "Red Delicious",
+      "aliases": [],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [
+        "4015",
+        "4016",
+        "4167",
+        "4168"
+      ],
+      "skin": {
+        "base": "#C81E2A",
+        "blush": "#9B1520",
+        "pattern": "solid",
+        "blushAmount": 0.2,
+        "lenticels": false
+      },
+      "skinVerified": false,
+      "skinNote": "Drawn solid red from the variety name. A technical Australian skin description was not in the sources used. The 1993 WA journal discussed red sports and partial colour as a separate point, so a stripe pattern was not assumed.",
+      "regions": [],
+      "seasonMonths": [],
+      "seasonKind": "unspecified",
+      "seasonNote": "",
+      "whereToFind": "A long-standing supermarket apple. APAL names Red Delicious among the most popular varieties grown in Australia.",
+      "fact": "APAL lists Red Delicious with Granny Smith, Cripps Pink, Fuji and Gala as one of the most popular apples Australia produces.",
+      "factStatus": "verified",
+      "sources": [
+        "https://apal.org.au/consumer/varieties/"
+      ]
+    },
+    {
+      "id": "golden-delicious",
+      "name": "Golden Delicious",
+      "aliases": [],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [
+        "3285",
+        "4020",
+        "4021",
+        "4136",
+        "4137"
+      ],
+      "skin": {
+        "base": "#F4D34A",
+        "blush": "#F0B429",
+        "pattern": "solid",
+        "blushAmount": 0.18,
+        "lenticels": false
+      },
+      "skinVerified": false,
+      "skinNote": "Drawn yellow from the variety name and from its role as the yellow parent of Cripps Pink. A standalone Australian technical skin chart was not quoted.",
+      "regions": [],
+      "seasonMonths": [],
+      "seasonKind": "unspecified",
+      "seasonNote": "",
+      "whereToFind": "Sold in Australian supermarkets. Woolworths groups it with the mild, sweet apples.",
+      "fact": "John Cripps and Eleanor Melvin-Carter wrote that Golden Delicious is a chance seedling found in West Virginia, USA, in about 1890, and that it possibly came from Grimes Golden. It is a parent of both Cripps Pink and Cripps Red.",
+      "factStatus": "verified",
+      "sources": [
+        "https://library.dpird.wa.gov.au/cgi/viewcontent.cgi?article=1434&context=journal_agriculture4",
+        "https://www.woolworths.com.au/shop/explore/fruit-veg/guides/apples"
+      ]
+    },
+    {
+      "id": "jazz",
+      "name": "Jazz",
+      "aliases": [
+        "Scifresh"
+      ],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [
+        "3293",
+        "3294"
+      ],
+      "skin": {
+        "base": "#F3E2A0",
+        "blush": "#F0642A",
+        "pattern": "blush",
+        "blushAmount": 0.78,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "Canadian Food Inspection Agency: Scifresh has a larger area of bright orange-red overcolour than Braeburn or Fuji BC2. The pale ground is a drawing choice and was not quoted.",
+      "regions": [
+        "Manjimup, WA",
+        "Stanthorpe, QLD",
+        "Gippsland, VIC",
+        "Yarra Valley, VIC",
+        "Adelaide Hills, SA",
+        "Tamar Valley, TAS",
+        "Huon Valley, TAS"
+      ],
+      "seasonMonths": [],
+      "seasonKind": "unspecified",
+      "seasonNote": "CFIA calls Scifresh a mid to late season apple in the Okanagan comparison. An Australian retail month list was not quoted. Regions are the licensed-grower districts named in a 2017 APAL article and may have changed.",
+      "whereToFind": "Supermarkets. Montague has marketed Jazz in Australia; APAL lists it among newer varieties on the shelf.",
+      "fact": "Scifresh, sold as Jazz, was selected from a 1985 cross of Braeburn and Royal Gala made at Havelock North, New Zealand, by Allan White. T&G launched the Jazz brand in 2004.",
+      "factStatus": "verified",
+      "sources": [
+        "https://active.inspection.gc.ca/english/plaveg/pbrpov/cropreport/app/app00003520e.shtml",
+        "https://www.bioeconomyscience.co.nz/news-and-events/news/2025-news/two-iconic-new-zealand-apple-varieties-mark-40-years",
+        "https://apal.org.au/innovation-family-way-montague/",
+        "https://apal.org.au/consumer/varieties/"
+      ]
+    },
+    {
+      "id": "envy",
+      "name": "Envy",
+      "aliases": [
+        "Scilate"
+      ],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [
+        "3315",
+        "3616"
+      ],
+      "skin": {
+        "base": "#F6E7B2",
+        "blush": "#D3222A",
+        "pattern": "blush",
+        "blushAmount": 0.86,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "The NZ Bioeconomy Science Institute describes Scilate as radiant red. Woolworths says it brings together Braeburn and Royal Gala. Ground colour is a drawing choice.",
+      "regions": [],
+      "seasonMonths": [],
+      "seasonKind": "unspecified",
+      "seasonNote": "CFIA says Scilate eats very late compared with Scifresh. An Australian month-by-month retail window was not quoted.",
+      "whereToFind": "Australian supermarkets. APAL lists Envy among newer shelf varieties, and Montague manages the brand here.",
+      "fact": "Scilate, sold as Envy, comes from the same 1985 Royal Gala × Braeburn cross as Jazz, made at Havelock North, New Zealand. It was chosen from that family in 1992 and launched as Envy in 2008.",
+      "factStatus": "verified",
+      "sources": [
+        "https://active.inspection.gc.ca/english/plaveg/pbrpov/cropreport/app/app00008711e.shtml",
+        "https://www.bioeconomyscience.co.nz/news-and-events/news/2025-news/two-iconic-new-zealand-apple-varieties-mark-40-years",
+        "https://www.woolworths.com.au/shop/explore/fruit-veg/guides/apples",
+        "https://apal.org.au/consumer/varieties/"
+      ]
+    },
+    {
+      "id": "kanzi",
+      "name": "Kanzi",
+      "aliases": [
+        "Nicoter"
+      ],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [
+        "3605"
+      ],
+      "skin": {
+        "base": "#F6D85A",
+        "blush": "#E10600",
+        "pattern": "blush",
+        "blushAmount": 0.74,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "Woolworths: a bright red apple with yellow highlights.",
+      "regions": [],
+      "seasonMonths": [],
+      "seasonKind": "unspecified",
+      "seasonNote": "",
+      "whereToFind": "Australian supermarkets. APAL lists Kanzi among newer varieties on the shelf, and Australian exporters have shipped it.",
+      "fact": "Parentage and breeding place were not confirmed from a primary source in this catalogue, so they are left blank. Woolworths describes the eating fruit as crunchy and sweet-tart, and slow to brown when cut.",
+      "factStatus": "verified",
+      "sources": [
+        "https://www.woolworths.com.au/shop/explore/fruit-veg/guides/apples",
+        "https://apal.org.au/consumer/varieties/",
+        "https://apal.org.au/wp-content/uploads/2020/06/APAL-Exporter-Directory-230418-v1.pdf"
+      ]
+    },
+    {
+      "id": "modi",
+      "name": "Modi",
+      "aliases": [
+        "CIVG198"
+      ],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [
+        "3629"
+      ],
+      "skin": {
+        "base": "#A31830",
+        "blush": "#7A1024",
+        "pattern": "solid",
+        "blushAmount": 0.25,
+        "lenticels": false
+      },
+      "skinVerified": false,
+      "skinNote": "Drawn as a dark red apple. A quoted Australian skin description was not found. PLU 3629 is listed against CIVG198 in the trade PLU table.",
+      "regions": [],
+      "seasonMonths": [],
+      "seasonKind": "unspecified",
+      "seasonNote": "",
+      "whereToFind": "APAL lists Modi among newer apple varieties on Australian supermarket shelves.",
+      "fact": "",
+      "factStatus": "none",
+      "sources": [
+        "https://apal.org.au/consumer/varieties/",
+        "https://jatechnologysolutions.com/downloads/plu-quick-reference.pdf"
+      ]
+    },
+    {
+      "id": "kalei",
+      "name": "Kalei",
+      "aliases": [
+        "RS103-130"
+      ],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [],
+      "skin": {
+        "base": "#C81F33",
+        "blush": "#E23A45",
+        "pattern": "blush",
+        "blushAmount": 0.55,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "Hort Innovation describes Kalei as an attractive red apple. A blush pattern versus a solid red was not specified, so the blush is a drawing choice.",
+      "regions": [],
+      "seasonMonths": [],
+      "seasonKind": "unspecified",
+      "seasonNote": "Hort Innovation says Kalei matures just before Pink Lady. A month list for shops was not quoted. It was evaluated at Applethorpe Research Station in southern Queensland; that is a breeding site, not a claim that it is only grown there.",
+      "whereToFind": "APAL lists Kalei among newer varieties on Australian supermarket shelves. Hort Innovation says the first commercial trees were available from winter 2013.",
+      "fact": "Kalei was the first scab-resistant apple released from the Queensland DAFF breeding program. It was publicly launched in May 2012, after being tested as RS103-130, and commercialised with APAL's Coregeo.",
+      "factStatus": "verified",
+      "sources": [
+        "https://www.horticulture.com.au/information-hub/our-projects/historical-reports/ap08041",
+        "https://www.horticulture.com.au/information-hub/our-projects/historical-reports/ap08008",
+        "https://apal.org.au/consumer/varieties/"
+      ]
+    },
+    {
+      "id": "smitten",
+      "name": "Smitten",
+      "aliases": [
+        "PremA17"
+      ],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [
+        "3627"
+      ],
+      "skin": {
+        "base": "#F6E27A",
+        "blush": "#D4252E",
+        "pattern": "stripe",
+        "blushAmount": 0.55,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "APAL calls Smitten bi-coloured. The exact red and yellow hues are a drawing choice. PLU 3627 is listed for PremA17.",
+      "regions": [
+        "Yarra Valley, VIC"
+      ],
+      "seasonMonths": [
+        2
+      ],
+      "seasonKind": "harvest",
+      "seasonNote": "APAL says Smitten ripens in February and is one of the first new-season apples, in the same window as Gala. The Yarra Valley entry is a documented picking site (Vernview), not a full map of licensees.",
+      "whereToFind": "Coles has stocked Smitten. APAL reported selected Queensland Coles stores first, then Victoria and New South Wales.",
+      "fact": "PremA17, sold as Smitten, was bred in New Zealand by Plant & Food Research and is owned by Prevar. APAL says the parentage draws on Gala, Braeburn, Falstaff and Fiesta. The first commercial Australian plantings were in 2013.",
+      "factStatus": "verified",
+      "sources": [
+        "https://apal.org.au/be-smitten-by-montagues-new-apple/",
+        "https://jatechnologysolutions.com/downloads/plu-quick-reference.pdf"
+      ]
+    },
+    {
+      "id": "rockit",
+      "name": "Rockit",
+      "aliases": [
+        "PremA96"
+      ],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [],
+      "skin": {
+        "base": "#F2C1C4",
+        "blush": "#D23A3A",
+        "pattern": "blush",
+        "blushAmount": 0.6,
+        "lenticels": false
+      },
+      "skinVerified": false,
+      "skinNote": "Colour was not quoted in the sources used. Drawn as a small red-blushed apple. Growers describe it as a small apple a child can finish.",
+      "regions": [
+        "Adelaide Hills, SA",
+        "Ardmona, VIC"
+      ],
+      "seasonMonths": [],
+      "seasonKind": "unspecified",
+      "seasonNote": "",
+      "whereToFind": "Sold as a small snack apple. APAL lists Rockit on Australian shelves. Documented growers include several Adelaide Hills orchards and Plunkett Orchards at Ardmona.",
+      "fact": "APAL identifies Rockit with the variety PremA96. Lenswood growers describe a small apple with crisp white flesh, planted in the Adelaide Hills from 2014.",
+      "factStatus": "verified",
+      "sources": [
+        "https://apal.org.au/consumer/varieties/",
+        "https://apal.org.au/vale-ashley-mason-apple-grower-and-gentleman/",
+        "https://lenswoodcoop.com.au/nfga/rockit/rockitapplegrowers/"
+      ]
+    },
+    {
+      "id": "eve",
+      "name": "Eve",
+      "aliases": [],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [],
+      "skin": {
+        "base": "#F4E3A0",
+        "blush": "#E1262D",
+        "pattern": "blush",
+        "blushAmount": 0.8,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "FreshPlaza, quoting the 2020 Montague season: bright red skin and white flesh.",
+      "regions": [
+        "Batlow, NSW",
+        "Huon Valley, TAS"
+      ],
+      "seasonMonths": [],
+      "seasonKind": "unspecified",
+      "seasonNote": "A 2020 trade report said Eve was harvested in late autumn and sold at Coles until August that year. That is a season snapshot, not a standing calendar, so no fixed months are marked.",
+      "whereToFind": "Montague brand. In 2020 it was reported in Coles in every state except Western Australia. Current ranging may differ.",
+      "fact": "APAL lists Eve among newer supermarket apples. A 2020 harvest report said Australian Eve was grown in the cool districts of Batlow and the Huon Valley.",
+      "factStatus": "verified",
+      "sources": [
+        "https://apal.org.au/consumer/varieties/",
+        "https://www.freshplaza.com/oceania/article/9242578/yello-tm-and-eve-tm-to-close-the-apple-harvest/"
+      ]
+    },
+    {
+      "id": "yello",
+      "name": "Yello",
+      "aliases": [],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [],
+      "skin": {
+        "base": "#FFE14A",
+        "blush": "#F6C431",
+        "pattern": "solid",
+        "blushAmount": 0.12,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "Trade reports describe a bright yellow skin.",
+      "regions": [
+        "Pakenham, VIC",
+        "West Gippsland, VIC",
+        "Drouin, VIC",
+        "Yarra Valley, VIC",
+        "Mornington Peninsula, VIC"
+      ],
+      "seasonMonths": [],
+      "seasonKind": "unspecified",
+      "seasonNote": "",
+      "whereToFind": "Montague has supplied Yello to selected independents, selected Woolworths stores in New South Wales, and selected Coles stores in Victoria. Distribution is limited.",
+      "fact": "Montague describes Yello as a Japanese yellow apple, a cross of Golden Delicious and Senshu, grown with Victorian partners. One trade article dates the cross to 1983 and another to 1993, so the year is not settled here.",
+      "factStatus": "unverified",
+      "sources": [
+        "https://www.foodanddrinkbusiness.com.au/new-in-store/montague-brings-yellow-apples-back-to-grocery-stores",
+        "https://www.freshplaza.com/oceania/article/9242578/yello-tm-and-eve-tm-to-close-the-apple-harvest/",
+        "https://apal.org.au/consumer/varieties/"
+      ]
+    },
+    {
+      "id": "cosmic-crisp",
+      "name": "Cosmic Crisp",
+      "aliases": [
+        "WA 38"
+      ],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [
+        "3507"
+      ],
+      "skin": {
+        "base": "#C81D2E",
+        "blush": "#F4E4B0",
+        "pattern": "speckle",
+        "blushAmount": 0.35,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "ABC News: a red apple named for the white, star-like dapples on the skin. Speckles are drawn in the blush colour.",
+      "regions": [
+        "Yarra Valley, VIC",
+        "Batlow, NSW",
+        "Manjimup, WA"
+      ],
+      "seasonMonths": [
+        7
+      ],
+      "seasonKind": "retail",
+      "seasonNote": "The Australian Cosmic Crisp site says fruit is in selected supermarkets and greengrocers from July, while stocks last. Only July is marked because the end of the window is stock, not a fixed month. It is not listed as a Tasmanian or Queensland apple in these sources.",
+      "whereToFind": "Selected Woolworths stores, Harris Farm and independent grocers when the Australian crop is in. First local harvest was 2024.",
+      "fact": "WA 38 was bred at Washington State University from Honeycrisp × Enterprise and named for the starry speckles on its skin. In Australia it is grown in the Yarra Valley, Batlow and Manjimup.",
+      "factStatus": "verified",
+      "sources": [
+        "https://www.abc.net.au/news/2024-06-01/australian-apples-new-varieties-brands-consumer-demand/103913830",
+        "https://www.cosmiccrisp.com.au/growers-orchards/",
+        "https://www.cosmiccrisp.com.au/where-to-buy-apples/",
+        "https://www.woolworths.com.au/shop/productdetails/918134/apple-cosmic-crisp-md-apple-cosmic-crisp"
+      ]
+    },
+    {
+      "id": "snapdragon",
+      "name": "SnapDragon",
+      "aliases": [
+        "Snap Dragon",
+        "NY 1",
+        "New York 1"
+      ],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [
+        "3442"
+      ],
+      "skin": {
+        "base": "#E31C2A",
+        "blush": "#B11220",
+        "pattern": "solid",
+        "blushAmount": 0.2,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "Woolworths: vibrant red skin. PLU 3442 is listed for New York 1 (SnapDragon).",
+      "regions": [
+        "Adelaide Hills, SA",
+        "Batlow, NSW"
+      ],
+      "seasonMonths": [
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "seasonKind": "retail",
+      "seasonNote": "The Australian SnapDragon site says the apples are available March–April. A 2026 FreshPlaza report says mid-April through July as the crop grew. The marked months cover both reported windows rather than a single agreed calendar.",
+      "whereToFind": "Woolworths has a SnapDragon product page. No variety called Snap Fresh was found; this is the Australian supermarket apple that matched that name.",
+      "fact": "SnapDragon was developed by Cornell University and is licensed in Australia to Fruit Australia. The Australian site names Adelaide Hills and Batlow as growing regions.",
+      "factStatus": "verified",
+      "sources": [
+        "https://snapdragonapple.com.au/",
+        "https://www.freshplaza.com/north-america/article/9885251/australian-snapdragon-apple-production-triples/",
+        "https://www.woolworths.com.au/shop/productdetails/314347/apple-snapdragon",
+        "https://jatechnologysolutions.com/downloads/plu-quick-reference.pdf"
+      ]
+    },
+    {
+      "id": "ambrosia",
+      "name": "Ambrosia",
+      "aliases": [],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [
+        "3438",
+        "3510"
+      ],
+      "skin": {
+        "base": "#F0C14A",
+        "blush": "#D64545",
+        "pattern": "blush",
+        "blushAmount": 0.42,
+        "lenticels": false
+      },
+      "skinVerified": false,
+      "skinNote": "Woolworths describes bi-coloured skin 'with a golden to butter…'. The published line was captured incomplete, so the red blush amount is a drawing guess.",
+      "regions": [],
+      "seasonMonths": [],
+      "seasonKind": "unspecified",
+      "seasonNote": "",
+      "whereToFind": "A Montague-managed brand sold through Australian retailers. Woolworths includes it in the apple guide.",
+      "fact": "Woolworths describes Ambrosia as medium to large, conical, honey-sweet and bi-coloured. Breeding origin was not confirmed in the sources saved here.",
+      "factStatus": "verified",
+      "sources": [
+        "https://www.woolworths.com.au/shop/explore/fruit-veg/guides/apples",
+        "https://www.freshplaza.com/oceania/article/9242578/yello-tm-and-eve-tm-to-close-the-apple-harvest/",
+        "https://montaguefarms.com.au/wp-content/uploads/2025/01/Montague-Farms_FY24-Modern-Slavery-Statement-Executed.pdf"
+      ]
+    },
+    {
+      "id": "jonathan",
+      "name": "Jonathan",
+      "aliases": [],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [
+        "4148",
+        "4149",
+        "4150",
+        "4151"
+      ],
+      "skin": {
+        "base": "#F2D2A2",
+        "blush": "#C81E2A",
+        "pattern": "blush",
+        "blushAmount": 0.7,
+        "lenticels": false
+      },
+      "skinVerified": false,
+      "skinNote": "Drawn as a red apple with a pale ground. A technical skin description was not in the sources used.",
+      "regions": [],
+      "seasonMonths": [],
+      "seasonKind": "unspecified",
+      "seasonNote": "",
+      "whereToFind": "A traditional Australian apple. Current supermarket ranging was not reconfirmed beyond ABC describing Jonathan as still part of the old guard next to Granny Smith.",
+      "fact": "ABC News, writing about the apple category in 2024, named Jonathan alongside Granny Smith as one of the traditional varieties branded apples sit beside.",
+      "factStatus": "verified",
+      "sources": [
+        "https://www.abc.net.au/news/2024-06-01/australian-apples-new-varieties-brands-consumer-demand/103913830"
+      ]
+    },
+    {
+      "id": "greenstar",
+      "name": "Greenstar",
+      "aliases": [
+        "Nicogreen"
+      ],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [
+        "3612"
+      ],
+      "skin": {
+        "base": "#8FCB45",
+        "blush": "#8FCB45",
+        "pattern": "solid",
+        "blushAmount": 0,
+        "lenticels": false
+      },
+      "skinVerified": false,
+      "skinNote": "Drawn green from the name Nicogreen / Greenstar. A skin description was not quoted. PLU 3612 is listed for Nicogreen.",
+      "regions": [],
+      "seasonMonths": [],
+      "seasonKind": "unspecified",
+      "seasonNote": "",
+      "whereToFind": "Named in the APAL exporter directory among apples Australian packers were offering for export. Domestic supermarket ranging was not confirmed.",
+      "fact": "",
+      "factStatus": "none",
+      "sources": [
+        "https://apal.org.au/wp-content/uploads/2020/06/APAL-Exporter-Directory-230418-v1.pdf",
+        "https://jatechnologysolutions.com/downloads/plu-quick-reference.pdf"
+      ]
+    },
+    {
+      "id": "miapple",
+      "name": "MiApple",
+      "aliases": [],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [],
+      "skin": {
+        "base": "#D0121B",
+        "blush": "#D0121B",
+        "pattern": "solid",
+        "blushAmount": 0,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "Woolworths: block red colour.",
+      "regions": [],
+      "seasonMonths": [
+        3,
+        4,
+        5
+      ],
+      "seasonKind": "retail",
+      "seasonNote": "Woolworths lists MiApple in season March–May.",
+      "whereToFind": "Listed in the Woolworths Australian apple guide.",
+      "fact": "Woolworths describes MiApple as block red, lightly sweet and crisp.",
+      "factStatus": "verified",
+      "sources": [
+        "https://www.woolworths.com.au/shop/explore/fruit-veg/guides/apples"
+      ]
+    },
+    {
+      "id": "southern-bliss",
+      "name": "Southern Bliss",
+      "aliases": [],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [],
+      "skin": {
+        "base": "#F0B4A0",
+        "blush": "#E23B3B",
+        "pattern": "blush",
+        "blushAmount": 0.7,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "Woolworths: bright red skin with a sunny-side blush.",
+      "regions": [],
+      "seasonMonths": [
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "seasonKind": "retail",
+      "seasonNote": "Woolworths lists Southern Bliss in season from late April to August.",
+      "whereToFind": "Woolworths describes it as an organic apple in their guide.",
+      "fact": "Woolworths describes Southern Bliss as an organic apple with bright red skin, a sunny-side blush, and a sweet aroma.",
+      "factStatus": "verified",
+      "sources": [
+        "https://www.woolworths.com.au/shop/explore/fruit-veg/guides/apples"
+      ]
+    },
+    {
+      "id": "kissabel",
+      "name": "Kissabel",
+      "aliases": [
+        "R201"
+      ],
+      "category": "apple",
+      "zone": "orchard",
+      "form": "apple",
+      "recordKind": "cultivar",
+      "pluCodes": [],
+      "skin": {
+        "base": "#C4233A",
+        "blush": "#8E1A44",
+        "pattern": "solid",
+        "blushAmount": 0.3,
+        "lenticels": false
+      },
+      "skinVerified": false,
+      "skinNote": "Skin and flesh colour were not described in the source used. The red drawing is a placeholder, not a claim about red flesh.",
+      "regions": [
+        "Lenswood, Adelaide Hills, SA"
+      ],
+      "seasonMonths": [],
+      "seasonKind": "unspecified",
+      "seasonNote": "",
+      "whereToFind": "APAL noted R201 (Kissabel) among varieties grown by the Mason family at Lenswood. National supermarket distribution was not confirmed. Montague also lists Kissabel as a brand.",
+      "fact": "",
+      "factStatus": "none",
+      "sources": [
+        "https://apal.org.au/vale-ashley-mason-apple-grower-and-gentleman/",
+        "https://montaguefarms.com.au/wp-content/uploads/2025/01/Montague-Farms_FY24-Modern-Slavery-Statement-Executed.pdf"
+      ]
+    },
+    {
+      "id": "packhams-triumph",
+      "name": "Packham's Triumph",
+      "aliases": [
+        "Packham"
+      ],
+      "category": "pear",
+      "zone": "orchard",
+      "form": "pear",
+      "recordKind": "cultivar",
+      "pluCodes": [],
+      "skin": {
+        "base": "#8FCB45",
+        "blush": "#D6E07A",
+        "pattern": "solid",
+        "blushAmount": 0.15,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "APAL exporter directory: vivid green skin and white firm flesh. The Australian Dictionary of Biography describes the fruit as light green, well shaped, with a short neck.",
+      "regions": [
+        "Goulburn Valley, VIC"
+      ],
+      "seasonMonths": [
+        2,
+        3
+      ],
+      "seasonKind": "harvest",
+      "seasonNote": "Agriculture Victoria's Horticulture Industry Networks guide gives Packham harvest as about late February to March, and says times vary by region and season. APAL says about 90% of Australia's pears are grown in the Goulburn Valley; Western Australia, Tasmania and South Australia also grow pears. That industry split is not a Packham-only census.",
+      "whereToFind": "The main fresh pear in Australian shops. APAL says Packhams are mostly sold fresh, and are also the main export pear.",
+      "fact": "Charles Henry Packham raised the pear in 1896 at Garra, New South Wales, by crossing Uvedale St Germain (Bell) with a Williams. W. J. Allen of the Department of Agriculture named it Packham's Triumph.",
+      "factStatus": "verified",
+      "sources": [
+        "https://adb.anu.edu.au/biography/packham-charles-henry-13142",
+        "https://apal.org.au/consumer/varieties/",
+        "https://apal.org.au/wp-content/uploads/2020/06/APAL-Exporter-Directory-230418-v1.pdf",
+        "https://www.hin.com.au/__data/assets/pdf_file/0007/17899/Harvest-maturity.pdf"
+      ]
+    },
+    {
+      "id": "beurre-bosc",
+      "name": "Beurré Bosc",
+      "aliases": [
+        "Bosc",
+        "Kaiser Alexander"
+      ],
+      "category": "pear",
+      "zone": "orchard",
+      "form": "pear",
+      "recordKind": "cultivar",
+      "pluCodes": [],
+      "skin": {
+        "base": "#C48A3A",
+        "blush": "#8A5A28",
+        "pattern": "solid",
+        "blushAmount": 0.45,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "APAL: cinnamon-russet skin. NSW DPI Agfact: cinnamon russet.",
+      "regions": [
+        "Goulburn Valley, VIC"
+      ],
+      "seasonMonths": [
+        2,
+        3
+      ],
+      "seasonKind": "harvest",
+      "seasonNote": "HIN guide: about late February to late March. The Goulburn Valley note on the Packham record applies to the pear industry generally.",
+      "whereToFind": "One of the eight main pear types APAL says are grown in Australia, and a regular supermarket pear.",
+      "fact": "NSW DPI's European pear Agfact gives the origin as an 1807 open-pollinated seedling, either from Van Mons at Louvain in Belgium or from Haute-Saône in France. APAL describes Australian-grown fruit as cinnamon-russet with sweet white flesh.",
+      "factStatus": "verified",
+      "sources": [
+        "https://www.dpi.nsw.gov.au/__data/assets/pdf_file/0013/120217/european-pear-varieties.pdf",
+        "https://apal.org.au/consumer/varieties/",
+        "https://apal.org.au/wp-content/uploads/2020/06/APAL-Exporter-Directory-230418-v1.pdf",
+        "https://www.hin.com.au/__data/assets/pdf_file/0007/17899/Harvest-maturity.pdf"
+      ]
+    },
+    {
+      "id": "corella",
+      "name": "Corella",
+      "aliases": [
+        "Corella Forelle"
+      ],
+      "category": "pear",
+      "zone": "orchard",
+      "form": "pear",
+      "recordKind": "cultivar",
+      "pluCodes": [],
+      "skin": {
+        "base": "#D6E07A",
+        "blush": "#E24B5A",
+        "pattern": "blush",
+        "blushAmount": 0.48,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "APAL exporter directory: a pink/red blush. APAL's consumer page lists the type as Corella Forelle. Parentage was not confirmed, so none is stated.",
+      "regions": [
+        "Goulburn Valley, VIC"
+      ],
+      "seasonMonths": [
+        3,
+        4
+      ],
+      "seasonKind": "harvest",
+      "seasonNote": "HIN guide: about late March to April. NSW DPI's Orange table also places Corella maturity around the fourth week of March into early April.",
+      "whereToFind": "A regular Australian supermarket pear, one of APAL's eight main local pear types.",
+      "fact": "APAL credits Australia's sunshine for the pink/red blush on Corella pears. Breeding origin was not established in the sources used.",
+      "factStatus": "verified",
+      "sources": [
+        "https://apal.org.au/consumer/varieties/",
+        "https://apal.org.au/wp-content/uploads/2020/06/APAL-Exporter-Directory-230418-v1.pdf",
+        "https://www.hin.com.au/__data/assets/pdf_file/0007/17899/Harvest-maturity.pdf",
+        "https://www.dpi.nsw.gov.au/__data/assets/pdf_file/0013/120217/european-pear-varieties.pdf"
+      ]
+    },
+    {
+      "id": "williams",
+      "name": "Williams",
+      "aliases": [
+        "Williams' Bon Chrétien",
+        "Bartlett"
+      ],
+      "category": "pear",
+      "zone": "orchard",
+      "form": "pear",
+      "recordKind": "cultivar",
+      "pluCodes": [],
+      "skin": {
+        "base": "#E6D15A",
+        "blush": "#E6A23A",
+        "pattern": "blush",
+        "blushAmount": 0.2,
+        "lenticels": false
+      },
+      "skinVerified": false,
+      "skinNote": "A skin description was not quoted in the sources used. Drawn as a yellow pear. Bartlett is the name used in some other countries for Williams' Bon Chrétien.",
+      "regions": [
+        "Goulburn Valley, VIC"
+      ],
+      "seasonMonths": [
+        2
+      ],
+      "seasonKind": "harvest",
+      "seasonNote": "HIN guide: early to mid February. APAL says pear picking starts in January and fruit reaches the market soon after.",
+      "whereToFind": "APAL says Williams and Packham are the most popular Australian pears, with many Williams going to canning and Packhams mostly sold fresh.",
+      "fact": "APAL lists Williams' Bon Chrétien among the eight main pear types grown in Australia.",
+      "factStatus": "verified",
+      "sources": [
+        "https://apal.org.au/consumer/varieties/",
+        "https://www.hin.com.au/__data/assets/pdf_file/0007/17899/Harvest-maturity.pdf"
+      ]
+    },
+    {
+      "id": "kensington-pride",
+      "name": "Kensington Pride",
+      "aliases": [
+        "Bowen mango",
+        "Bowen Special"
+      ],
+      "category": "tropical",
+      "zone": "orchard",
+      "form": "mango",
+      "recordKind": "cultivar",
+      "pluCodes": [],
+      "skin": {
+        "base": "#F2B434",
+        "blush": "#E25A6A",
+        "pattern": "blush",
+        "blushAmount": 0.4,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "Kensington Pride growers' site: a reddish-pink blush over the fruit, with golden flesh.",
+      "regions": [
+        "Darwin, NT",
+        "Katherine, NT",
+        "Kununurra, WA",
+        "Townsville, QLD",
+        "Cairns, QLD",
+        "Mareeba, QLD",
+        "Bowen, QLD"
+      ],
+      "seasonMonths": [
+        9,
+        10,
+        11,
+        12
+      ],
+      "seasonKind": "retail",
+      "seasonNote": "The growers' site says the season starts in Darwin and runs through those regions from early September until December.",
+      "whereToFind": "The common Australian mango in shops through spring and early summer. Also sold as Bowen or Bowen Special.",
+      "fact": "Kensington Pride and the Bowen mango are the same variety, named for the Bowen property where it was popularised. The State Library of Queensland credits Henry Bankhead Lott with the first commercial crops on his Kensington farm in the early 1900s. The growers' site says the fruit is believed to trace back to mangoes brought into Bowen by traders from India.",
+      "factStatus": "verified",
+      "sources": [
+        "https://www.kensingtonpridemangoes.com.au/about",
+        "https://www.slq.qld.gov.au/blog/discover-bowen-qld"
+      ]
+    },
+    {
+      "id": "menindee-seedless",
+      "name": "Menindee Seedless",
+      "aliases": [],
+      "category": "grape",
+      "zone": "trellis",
+      "form": "grape",
+      "recordKind": "cultivar",
+      "pluCodes": [],
+      "skin": {
+        "base": "#C6D95A",
+        "blush": "#C6D95A",
+        "pattern": "solid",
+        "blushAmount": 0,
+        "lenticels": false
+      },
+      "skinVerified": false,
+      "skinNote": "Berry colour was not stated in the ABC report. Drawn as a pale green table grape until a description is added.",
+      "regions": [
+        "Menindee, NSW"
+      ],
+      "seasonMonths": [
+        12
+      ],
+      "seasonKind": "retail",
+      "seasonNote": "ABC says the grapes are popular around Christmas. A full start-and-end season was not stated, so only December is marked.",
+      "whereToFind": "Sold to Costa and then to the major supermarket chains, according to growers quoted by the ABC.",
+      "fact": "Menindee, on the Darling River in New South Wales, is the birthplace of the Menindee Seedless table grape. Growers quoted by the ABC aim for a clean bunch and berries of at least 17–18 mm.",
+      "factStatus": "verified",
+      "sources": [
+        "https://www.abc.net.au/news/2019-12-07/menindee-holds-on-to-its-grape-industry-despite-water-woes/11745520"
+      ]
+    },
+    {
+      "id": "cotton-candy",
+      "name": "Cotton Candy",
+      "aliases": [
+        "Cotton Candy grape"
+      ],
+      "category": "grape",
+      "zone": "greenhouse",
+      "form": "grape",
+      "recordKind": "cultivar",
+      "pluCodes": [],
+      "skin": {
+        "base": "#D5E39A",
+        "blush": "#E7A0B0",
+        "pattern": "blush",
+        "blushAmount": 0.28,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "University of Arkansas extension: green berries, sometimes tinged maroon. The greenhouse bed is an app placement for a novelty grape, not a claim about how it is farmed.",
+      "regions": [],
+      "seasonMonths": [],
+      "seasonKind": "unspecified",
+      "seasonNote": "No Australian season was confirmed. The Arkansas note says northern-hemisphere supply was originally late summer and later extended by South and Central American growers.",
+      "whereToFind": "A branded novelty grape. Australian growing regions were not confirmed in the sources used.",
+      "fact": "International Fruit Genetics says David Cain first bred Cotton Candy in California in 2003. University of Arkansas extension describes the cross as an unreleased Arkansas Concord seedling line with seedless grapes, using embryo rescue, and says the berries are green and sometimes tinged maroon.",
+      "factStatus": "verified",
+      "sources": [
+        "https://www.globenewswire.com/news-release/2023/02/22/2613451/0/en/ifg-celebrates-20-years-of-the-cotton-candy-grape-delighting-adults-and-children-around-the-world.html",
+        "https://www.uaex.uada.edu/yard-garden/resource-library/plant-week/grape-cotton-candy-03-26-2021.aspx"
+      ]
+    },
+    {
+      "id": "dutch-carrot",
+      "name": "Dutch carrot",
+      "aliases": [
+        "Baby carrot"
+      ],
+      "category": "vegetable",
+      "zone": "bed",
+      "form": "carrot",
+      "recordKind": "marketType",
+      "pluCodes": [],
+      "skin": {
+        "base": "#F08A1A",
+        "blush": "#E26A12",
+        "pattern": "solid",
+        "blushAmount": 0,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "The small orange carrots sold in Australian shops as Dutch or baby carrots. This is a market type, not one cultivar.",
+      "regions": [],
+      "seasonMonths": [],
+      "seasonKind": "unspecified",
+      "seasonNote": "",
+      "whereToFind": "Supermarkets, usually with the bagged carrots.",
+      "fact": "",
+      "factStatus": "none",
+      "sources": []
+    },
+    {
+      "id": "purple-carrot",
+      "name": "Purple carrot",
+      "aliases": [
+        "Purple heirloom carrot"
+      ],
+      "category": "vegetable",
+      "zone": "bed",
+      "form": "carrot",
+      "recordKind": "marketType",
+      "pluCodes": [],
+      "skin": {
+        "base": "#6A2A78",
+        "blush": "#4A1A58",
+        "pattern": "solid",
+        "blushAmount": 0,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "Drawn purple from the market name. A cultivar was not pinned down, so this is a shop type.",
+      "regions": [],
+      "seasonMonths": [],
+      "seasonKind": "unspecified",
+      "seasonNote": "",
+      "whereToFind": "Supermarkets and greengrocers when heirloom or mixed carrot bunches are in.",
+      "fact": "",
+      "factStatus": "none",
+      "sources": []
+    },
+    {
+      "id": "yellow-carrot",
+      "name": "Yellow carrot",
+      "aliases": [],
+      "category": "vegetable",
+      "zone": "bed",
+      "form": "carrot",
+      "recordKind": "marketType",
+      "pluCodes": [],
+      "skin": {
+        "base": "#F2C431",
+        "blush": "#E0A820",
+        "pattern": "solid",
+        "blushAmount": 0,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "Drawn yellow from the market name. A cultivar was not pinned down, so this is a shop type.",
+      "regions": [],
+      "seasonMonths": [],
+      "seasonKind": "unspecified",
+      "seasonNote": "",
+      "whereToFind": "Greengrocers and some supermarkets, often in mixed heirloom bunches.",
+      "fact": "",
+      "factStatus": "none",
+      "sources": []
+    },
+    {
+      "id": "cherry-tomato",
+      "name": "Cherry tomato",
+      "aliases": [],
+      "category": "vegetable",
+      "zone": "trellis",
+      "form": "tomato",
+      "recordKind": "marketType",
+      "pluCodes": [],
+      "skin": {
+        "base": "#E23B2F",
+        "blush": "#C42820",
+        "pattern": "solid",
+        "blushAmount": 0.2,
+        "lenticels": false
+      },
+      "skinVerified": true,
+      "skinNote": "A shop type, not one cultivar. Drawn as a red cherry tomato.",
+      "regions": [],
+      "seasonMonths": [],
+      "seasonKind": "unspecified",
+      "seasonNote": "",
+      "whereToFind": "Supermarkets, in punnets.",
+      "fact": "",
+      "factStatus": "none",
+      "sources": []
+    }
+  ]
+}

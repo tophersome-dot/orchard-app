@@ -1,0 +1,12 @@
+{
+  "images": [
+    {
+      "filename": "fruit_rockit.png",
+      "idiom": "universal"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
+}

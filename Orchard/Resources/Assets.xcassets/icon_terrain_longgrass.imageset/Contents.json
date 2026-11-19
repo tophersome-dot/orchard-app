@@ -1,0 +1,12 @@
+{
+  "images": [
+    {
+      "filename": "icon_terrain_longgrass.png",
+      "idiom": "universal"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
+}
