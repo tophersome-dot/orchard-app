@@ -21,7 +21,7 @@ struct OrchardShortcuts: AppShortcutsProvider {
                 "Open supermarket mode in \(.applicationName)"
             ],
             shortTitle: LocalizedStringResource("Supermarket"),
-            systemImage: "basket.fill"
+            systemImageName: "basket.fill"
         )
     }
 }

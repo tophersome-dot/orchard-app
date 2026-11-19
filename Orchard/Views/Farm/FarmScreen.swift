@@ -434,7 +434,8 @@ struct FarmScreen: View {
 
     private func zoomRange(in viewSize: CGSize) -> (min: CGFloat, max: CGFloat) {
         let fit = fitScale(in: viewSize)
-        return (fit * FarmZoom.minimum, fit * FarmZoom.maximum)
+        let land = landScale(in: viewSize)
+        return (min(land, fit), fit * FarmZoom.maximum)
     }
 
     private func fitScale(in viewSize: CGSize) -> CGFloat {
@@ -651,8 +652,51 @@ struct FarmScreen: View {
         try? FarmLayout.write(previous, in: context)
     }
 
+    /// Placed sprites and painted cells, the yard that should fill the opening view.
+    private func occupiedWorldPoints() -> [CGPoint] {
+        var tiles = records.map(\.tile)
+        if let house = records.first(where: { $0.kind == .house }) {
+            tiles.append(contentsOf: FarmExpansion.footprint(kind: .house, anchor: house.tile))
+        }
+        tiles.append(contentsOf: displayTerrain.keys)
+        if tiles.isEmpty {
+            tiles = FarmExpansion.openingFocusTiles(for: yardPlan)
+        }
+        return tiles.map { IsoMap.center($0) }
+    }
+
+    private func landWorldPoints() -> [CGPoint] {
+        FarmExpansion.plots(for: yardPlan).flatMap { plot in
+            [
+                FarmTile(column: plot.columns.lowerBound, row: plot.rows.lowerBound),
+                FarmTile(column: plot.columns.upperBound, row: plot.rows.lowerBound),
+                FarmTile(column: plot.columns.upperBound, row: plot.rows.upperBound),
+                FarmTile(column: plot.columns.lowerBound, row: plot.rows.upperBound)
+            ].map { IsoMap.center($0) }
+        }
+    }
+
     private func fittedCamera(in viewSize: CGSize) -> FarmCamera {
-        let focus = FarmExpansion.openingFocusTiles(for: yardPlan).map { IsoMap.center($0) }
+        cameraFitting(occupiedWorldPoints(), in: viewSize, margin: IsoMap.tileWidth)
+    }
+
+    /// Zoom at which every unlockable plot fits on screen.
+    private func landScale(in viewSize: CGSize) -> CGFloat {
+        let points = landWorldPoints()
+        guard viewSize.width > 1,
+              let minX = points.map(\.x).min(),
+              let maxX = points.map(\.x).max(),
+              let minY = points.map(\.y).min(),
+              let maxY = points.map(\.y).max() else {
+            return fitScale(in: viewSize) * FarmZoom.minimum
+        }
+        let spanX = max(maxX - minX, 1) + IsoMap.tileWidth * 2
+        let spanY = max(maxY - minY, 1) + IsoMap.tileHeight * 2
+        let height = max(viewSize.height - 120, 1)
+        return min(viewSize.width * 0.92 / spanX, height * 0.92 / spanY)
+    }
+
+    private func cameraFitting(_ focus: [CGPoint], in viewSize: CGSize, margin: CGFloat) -> FarmCamera {
         guard viewSize.width > 1,
               let minX = focus.map(\.x).min(),
               let maxX = focus.map(\.x).max(),
@@ -660,10 +704,9 @@ struct FarmScreen: View {
               let maxY = focus.map(\.y).max() else {
             return FarmCamera(scale: 1, center: .zero, pan: .zero)
         }
-        let span = max(maxX - minX, 1)
-        let padded = span + IsoMap.tileWidth * 2.2
-        let fitted = DebugLaunch.farmZoom ?? min(1.6, (viewSize.width * 0.90) / padded)
-        let center = CGPoint(x: (minX + maxX) / 2, y: (minY + maxY) / 2 - IsoMap.tileHeight * 0.6)
+        let span = max(maxX - minX, 1) + margin * 2
+        let fitted = DebugLaunch.farmZoom ?? min(FarmZoom.maximum, (viewSize.width * 0.90) / span)
+        let center = CGPoint(x: (minX + maxX) / 2, y: (minY + maxY) / 2)
         return FarmCamera(scale: fitted, center: center, pan: .zero)
     }
 
@@ -744,7 +787,8 @@ private struct MapGestureOverlay: UIViewRepresentable {
 
         @objc func twoPan(_ gesture: UIPanGestureRecognizer) {
             if let pinch, pinch.state == .began || pinch.state == .changed { return }
-            parent.onTwoPan(gesture.translation(in: gesture.view), gesture.state)
+            let t = gesture.translation(in: gesture.view)
+            parent.onTwoPan(CGSize(width: t.x, height: t.y), gesture.state)
         }
 
         @objc func onePan(_ gesture: UIPanGestureRecognizer) {
@@ -753,7 +797,8 @@ private struct MapGestureOverlay: UIViewRepresentable {
                 oneStart = point
             }
             let start = oneStart ?? point
-            parent.onOnePan(start, point, gesture.translation(in: gesture.view), gesture.state)
+            let t = gesture.translation(in: gesture.view)
+            parent.onOnePan(start, point, CGSize(width: t.x, height: t.y), gesture.state)
             if gesture.state == .ended || gesture.state == .cancelled || gesture.state == .failed {
                 oneStart = nil
             }

@@ -393,7 +393,7 @@ struct FarmMapView: View {
             guard let name = FarmSprite.terrainEdge(kind) else { continue }
             let resolved = context.resolve(Image(name))
             for boundary in FarmSurface.boundaryEdges(of: tiles) {
-                drawEdgeStrip(resolved, edge: boundary.edge, owner: boundary.outwardFrom, in: context, size: size)
+                drawEdgeStrip(resolved, edge: boundary.edge, owner: boundary.outwardFrom, kind: kind, in: context, size: size)
             }
         }
     }
@@ -453,6 +453,7 @@ struct FarmMapView: View {
         _ image: GraphicsContext.ResolvedImage,
         edge: FarmGridEdge,
         owner: FarmTile,
+        kind: FarmItemKind,
         in context: GraphicsContext,
         size: CGSize
     ) {
@@ -469,7 +470,8 @@ struct FarmMapView: View {
         if outward.x * toward.x + outward.y * toward.y > 0 {
             outward = CGPoint(x: -outward.x, y: -outward.y)
         }
-        let height = IsoMap.tileWidth * 0.25 * camera.scale
+        let fraction: CGFloat = kind == .longgrass ? 0.18 : 0.12
+        let height = IsoMap.tileWidth * fraction * camera.scale
         let origin = CGPoint(x: start.x + outward.x * height, y: start.y + outward.y * height)
         let transform = CGAffineTransform(
             a: along.x, b: along.y,
@@ -479,6 +481,16 @@ struct FarmMapView: View {
         context.drawLayer { layer in
             layer.concatenate(transform)
             layer.draw(image, in: CGRect(x: 0, y: 0, width: length, height: height))
+            layer.blendMode = .destinationIn
+            let fade = Gradient(stops: [
+                .init(color: Color.white.opacity(0.15), location: 0),
+                .init(color: Color.white.opacity(0.85), location: 0.55),
+                .init(color: Color.white, location: 1)
+            ])
+            layer.fill(
+                Path(CGRect(x: 0, y: 0, width: length, height: height)),
+                with: .linearGradient(fade, startPoint: CGPoint(x: length / 2, y: 0), endPoint: CGPoint(x: length / 2, y: height))
+            )
         }
     }
 
