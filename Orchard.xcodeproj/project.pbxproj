@@ -16,6 +16,8 @@
 		9D381532AC018F0D28C6EB75 /* CatalogueValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7166AE7E7EC8B270E5765C40 /* CatalogueValidator.swift */; };
 		C5212B30FB5B3DBE1CD176D9 /* FarmExpansion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66738E900A93B778F351BA6C /* FarmExpansion.swift */; };
 		F9574A32694E793E13F51E91 /* FarmLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAA960907143914C1BED6996 /* FarmLayout.swift */; };
+		F11E5A0D1C0DE411AB10F002 /* Woodland.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5A0D1C0DE411AB10F001 /* Woodland.swift */; };
+		F11E5A0D1C0DE411AB10F004 /* WoodlandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11E5A0D1C0DE411AB10F003 /* WoodlandTests.swift */; };
 		24E20FBEEA2D33599D1963B0 /* FarmSprites.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B035B08283F786F17DC70E9 /* FarmSprites.swift */; };
 		608E3BC1B2DBEF1505A800E0 /* HouseProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB9E691E9D6A28E9CC779FA6 /* HouseProgress.swift */; };
 		45E8AEBE8AB456F3EFEC1F75 /* IsoMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA149C70F737A917352363FE /* IsoMap.swift */; };
@@ -75,6 +77,8 @@
 		7166AE7E7EC8B270E5765C40 /* CatalogueValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatalogueValidator.swift; sourceTree = "<group>"; };
 		66738E900A93B778F351BA6C /* FarmExpansion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarmExpansion.swift; sourceTree = "<group>"; };
 		CAA960907143914C1BED6996 /* FarmLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarmLayout.swift; sourceTree = "<group>"; };
+		F11E5A0D1C0DE411AB10F001 /* Woodland.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Woodland.swift; sourceTree = "<group>"; };
+		F11E5A0D1C0DE411AB10F003 /* WoodlandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WoodlandTests.swift; sourceTree = "<group>"; };
 		7B035B08283F786F17DC70E9 /* FarmSprites.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarmSprites.swift; sourceTree = "<group>"; };
 		AB9E691E9D6A28E9CC779FA6 /* HouseProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseProgress.swift; sourceTree = "<group>"; };
 		FA149C70F737A917352363FE /* IsoMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IsoMap.swift; sourceTree = "<group>"; };
@@ -178,6 +182,7 @@
 				7166AE7E7EC8B270E5765C40 /* CatalogueValidator.swift */,
 				66738E900A93B778F351BA6C /* FarmExpansion.swift */,
 				CAA960907143914C1BED6996 /* FarmLayout.swift */,
+				F11E5A0D1C0DE411AB10F001 /* Woodland.swift */,
 				7B035B08283F786F17DC70E9 /* FarmSprites.swift */,
 				AB9E691E9D6A28E9CC779FA6 /* HouseProgress.swift */,
 				FA149C70F737A917352363FE /* IsoMap.swift */,
@@ -303,6 +308,7 @@
 				C5F86E63C96FE4449DAC7556 /* CatalogueIntegrityTests.swift */,
 				6B683F0381917BF2880FDBAC /* CatalogueSearchTests.swift */,
 				7B4AE85DC626CBD8ADCC4AE1 /* FarmExpansionTests.swift */,
+				F11E5A0D1C0DE411AB10F003 /* WoodlandTests.swift */,
 				68B183F3D1AA004A640258D9 /* HouseProgressTests.swift */,
 				B585A628176534BDFE96A9B6 /* PlantHealthTests.swift */,
 				4F8CBE05E46925A659B026D9 /* StickerAndLayoutTests.swift */,
@@ -452,6 +458,7 @@
 				9D381532AC018F0D28C6EB75 /* CatalogueValidator.swift in Sources */,
 				C5212B30FB5B3DBE1CD176D9 /* FarmExpansion.swift in Sources */,
 				F9574A32694E793E13F51E91 /* FarmLayout.swift in Sources */,
+				F11E5A0D1C0DE411AB10F002 /* Woodland.swift in Sources */,
 				24E20FBEEA2D33599D1963B0 /* FarmSprites.swift in Sources */,
 				608E3BC1B2DBEF1505A800E0 /* HouseProgress.swift in Sources */,
 				45E8AEBE8AB456F3EFEC1F75 /* IsoMap.swift in Sources */,
@@ -487,6 +494,7 @@
 				517270791E107394DA6212AE /* CatalogueIntegrityTests.swift in Sources */,
 				BC890897835126D16355A672 /* CatalogueSearchTests.swift in Sources */,
 				4B57B2194A3BA776AF1D0439 /* FarmExpansionTests.swift in Sources */,
+				F11E5A0D1C0DE411AB10F004 /* WoodlandTests.swift in Sources */,
 				F63B9F918B18FBDB9A20CBBD /* HouseProgressTests.swift in Sources */,
 				95E048AF5995F558062A07FD /* PlantHealthTests.swift in Sources */,
 				5C8D58E4C40E5F23B8A14778 /* StickerAndLayoutTests.swift in Sources */,

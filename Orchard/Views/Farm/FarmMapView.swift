@@ -22,9 +22,12 @@ struct FarmMapView: View {
     var detailed: Bool
     var camera: FarmCamera
     var canvasSize: CGSize
-    /// Painted cells. Grass is every cell that is absent.
+    /// Painted cells. Grass is every dry cell that is absent.
     var terrain: [FarmTile: FarmItemKind]
     var hoverTiles: [FarmTile]
+    var decor: [DecorRecord] = []
+    var chart: IslandChart = .placeholder
+    var shoreSeed: UInt64 = 1
 
     private var zones: [String: String] {
         Dictionary(uniqueKeysWithValues: plants.map { ($0.key, $0.value.zone) })
@@ -37,30 +40,36 @@ struct FarmMapView: View {
     var body: some View {
         let plan = yardPlan
         ZStack {
-            FarmColor.freshGrass
+            FarmColor.ocean
+            TimelineView(.animation(minimumInterval: 0.05)) { timeline in
+                Canvas { context, size in
+                    let drift = shoreDrift(at: timeline.date)
+                    drawWater(in: &context, size: size, drift: drift)
+                }
+                .allowsHitTesting(false)
+            }
+            Canvas { context, size in
+                drawCliffs(in: context, size: size)
+                drawFoam(in: context, size: size)
+            }
+            .allowsHitTesting(false)
             grass
             Canvas { context, size in
                 drawTerrains(in: context, size: size)
-            }
-            .allowsHitTesting(false)
-            Canvas { context, _ in
-                for plot in FarmExpansion.lockedPlots(tastedCount: tastedCount, plan: plan) {
-                    context.stroke(
-                        plotOutline(plot),
-                        with: .color(Color.white.opacity(0.9)),
-                        style: StrokeStyle(lineWidth: 2, dash: [7, 6])
-                    )
-                }
+                drawBanks(in: context, size: size)
             }
             .allowsHitTesting(false)
             if detailed {
-                ForEach(drawables(plan: plan)) { item in
-                    drawableView(item)
-                        .position(
-                            x: item.point.x,
-                            y: item.anchorsBase ? item.point.y - item.foot / 2 : item.point.y
-                        )
-                        .zIndex(item.depth)
+                Canvas { context, size in
+                    drawSprites(drawables(plan: plan), in: context, size: size)
+                }
+                .allowsHitTesting(false)
+                let labels = drawables(plan: plan).filter { item in
+                    if case .plant = item.visual { return true }
+                    return false
+                }
+                ForEach(labels) { item in
+                    plantLabel(item)
                 }
             }
             if !hoverTiles.isEmpty {
@@ -81,6 +90,8 @@ struct FarmMapView: View {
     /// Tiles overlap by a couple of points so the sampler cannot open a seam.
     private var grass: some View {
         Canvas { context, size in
+            let ground = groundPath(in: size)
+            context.clip(to: ground, style: FillStyle(eoFill: false))
             let pitch = max(IsoMap.tileWidth * 3.5 * camera.scale, 1)
             let origin = camera.screenPoint(.zero, in: size)
             let bleed: CGFloat = 2
@@ -125,24 +136,27 @@ struct FarmMapView: View {
                     with: .radialGradient(gradient, center: center, startRadius: 0, endRadius: radius)
                 )
             }
+            for tint in chart.tints {
+                let center = camera.screenPoint(IsoMap.center(tint.tile), in: size)
+                let radius = IsoMap.tileWidth * tint.radius * camera.scale
+                let color = tint.light
+                    ? Color(red: 0.78, green: 0.92, blue: 0.46)
+                    : Color(red: 0.20, green: 0.38, blue: 0.08)
+                let gradient = Gradient(stops: [
+                    .init(color: color.opacity(tint.light ? 0.28 : 0.22), location: 0),
+                    .init(color: color.opacity(0.08), location: 0.55),
+                    .init(color: color.opacity(0), location: 1)
+                ])
+                context.drawLayer { layer in
+                    layer.blendMode = tint.light ? .softLight : .multiply
+                    layer.fill(
+                        Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius * 0.55, width: radius * 2, height: radius * 1.1)),
+                        with: .radialGradient(gradient, center: center, startRadius: 0, endRadius: radius)
+                    )
+                }
+            }
         }
         .allowsHitTesting(false)
-    }
-
-    private func plotOutline(_ plot: FarmPlotSpec) -> Path {
-        let corners = [
-            FarmTile(column: plot.columns.lowerBound, row: plot.rows.lowerBound),
-            FarmTile(column: plot.columns.upperBound, row: plot.rows.lowerBound),
-            FarmTile(column: plot.columns.upperBound, row: plot.rows.upperBound),
-            FarmTile(column: plot.columns.lowerBound, row: plot.rows.upperBound)
-        ]
-        var path = Path()
-        for (index, tile) in corners.enumerated() {
-            let point = camera.screenPoint(IsoMap.center(tile), in: canvasSize)
-            if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
-        }
-        path.closeSubpath()
-        return path
     }
 
     private func drawables(plan: YardPlan) -> [MapDrawable] {
@@ -156,7 +170,7 @@ struct FarmMapView: View {
         }
         for record in records {
             let tile = record.id == dragging ? (hover ?? record.tile) : record.tile
-            if record.kind.isTerrain || record.kind == .fence { continue }
+            if record.kind.isTerrain || record.kind == .fence || record.kind == .cleared { continue }
             if record.kind == .plant, let id = record.varietyID, let info = plants[id] {
                 let spot = FarmExpansion.spotKind(zone: info.zone)
                 if spot == .bed || spot == .vine {
@@ -174,7 +188,34 @@ struct FarmMapView: View {
         for (index, post) in FarmSurface.fencePosts(on: edges).enumerated() {
             items.append(makePost(index: index, world: post))
         }
+        let bounds = visibleTileBounds(in: canvasSize, margin: 6)
+        for record in decor where bounds.contains(record.tile) {
+            guard let sprite = Woodland.sprite(record.sprite) else { continue }
+            let dragged = record.id == dragging ? (hover ?? record.tile) : record.tile
+            items.append(makeDecor(record, sprite: sprite, tile: dragged))
+        }
+        let paths = Set(records.filter { $0.kind == .path }.map(\.tile))
+        for tile in chart.creek where bounds.contains(tile) {
+            guard let span = Woodland.bridge(at: tile, creek: chart.creek, paths: paths) else { continue }
+            items.append(makeBridge(tile: tile, span: span))
+        }
+        fadeTreesCoveringTheFarm(&items)
         return items.sorted { $0.depth < $1.depth }
+    }
+
+    private func visibleTileBounds(in size: CGSize, margin: Int) -> TileBounds {
+        let corners = [
+            CGPoint.zero,
+            CGPoint(x: size.width, y: 0),
+            CGPoint(x: 0, y: size.height),
+            CGPoint(x: size.width, y: size.height)
+        ].map { IsoMap.tile(at: camera.worldPoint($0, in: size)) }
+        let columns = corners.map(\.column)
+        let rows = corners.map(\.row)
+        return TileBounds(
+            columns: ((columns.min() ?? 0) - margin)...((columns.max() ?? 0) + margin),
+            rows: ((rows.min() ?? 0) - margin)...((rows.max() ?? 0) + margin)
+        )
     }
 
     /// Fence and path drags already live in `records` when the screen passes the preview.
@@ -200,7 +241,7 @@ struct FarmMapView: View {
         case .plant:
             guard let id = record.varietyID, let info = plants[id] else { return .sapling }
             return .plant(info)
-        case .fence, .path, .dirt, .sand, .longgrass, .tilled:
+        case .fence, .path, .dirt, .sand, .longgrass, .tilled, .forest, .lake, .creek, .cleared:
             return .bush
         }
     }
@@ -232,6 +273,7 @@ struct FarmMapView: View {
         case .soilVine, .soilBed: tile
         case .rail, .post: tile
         case .emptyVine: 0
+        case .decor: 0
         case .plant(let info):
             switch FarmExpansion.spotKind(zone: info.zone) {
             case .tree, .bed, .vine: tile
@@ -252,6 +294,7 @@ struct FarmMapView: View {
         case .soilTree, .soilVine, .soilBed: IsoMap.tileHeight
         case .rail, .post: width
         case .emptyVine: 0
+        case .decor: 0
         case .plant: IsoMap.tileWidth
         }
     }
@@ -272,6 +315,8 @@ struct FarmMapView: View {
             FarmSprite.plantName(zone: info.zone, category: info.category, varietyID: info.id, rating: info.rating)
         case .emptyVine:
             nil
+        case .decor(let sprite):
+            sprite.name
         }
     }
 
@@ -320,6 +365,8 @@ struct FarmMapView: View {
                 IsoDiamond().fill(OrchardColor.soil)
             }
         case .emptyVine:
+            EmptyView()
+        case .decor:
             EmptyView()
         case .plant(let info):
             if FarmExpansion.spotKind(zone: info.zone) == .tree {
@@ -424,8 +471,224 @@ struct FarmMapView: View {
         )
     }
 
+    private func makeDecor(_ record: DecorRecord, sprite: DecorSprite, tile: FarmTile) -> MapDrawable {
+        let scale = ShoreStamp.pixelScale(camera.scale) * CGFloat(record.scale)
+        let display = CGSize(width: sprite.size.width * scale, height: sprite.size.height * scale)
+        let anchor = CGPoint(x: sprite.anchor.x * scale, y: sprite.anchor.y * scale)
+        let ground = camera.screenPoint(IsoMap.center(tile), in: canvasSize)
+        let center = CGPoint(x: ground.x - anchor.x + display.width / 2, y: ground.y - anchor.y + display.height / 2)
+        return MapDrawable(
+            id: record.id.uuidString,
+            depth: IsoMap.center(tile).y + 0.42,
+            point: center,
+            visual: .decor(sprite),
+            width: display.width,
+            foot: display.height,
+            anchorsBase: false,
+            rotation: record.rotation,
+            flipped: record.flipped,
+            opacity: 1,
+            pivot: ground,
+            tall: sprite.isTall
+        )
+    }
+
+    private func makeBridge(tile: FarmTile, span: BridgeSpan) -> MapDrawable {
+        let stamp = span == .northSouth ? ShoreStamp.bridgeNE : ShoreStamp.bridgeNW
+        let corners = IsoMap.corners(tile)
+        let ground: CGPoint
+        if span == .northSouth {
+            ground = CGPoint(x: (corners[2].x + corners[3].x) / 2, y: (corners[2].y + corners[3].y) / 2)
+        } else {
+            ground = CGPoint(x: (corners[1].x + corners[2].x) / 2, y: (corners[1].y + corners[2].y) / 2)
+        }
+        let scale = ShoreStamp.pixelScale(camera.scale)
+        let display = CGSize(width: stamp.size.width * scale, height: stamp.size.height * scale)
+        let anchor = CGPoint(x: stamp.anchor.x * scale, y: stamp.anchor.y * scale)
+        let screen = camera.screenPoint(ground, in: canvasSize)
+        let center = CGPoint(x: screen.x - anchor.x + display.width / 2, y: screen.y - anchor.y + display.height / 2)
+        return MapDrawable(
+            id: "bridge-\(tile.column)-\(tile.row)",
+            depth: IsoMap.center(tile).y + 0.25,
+            point: center,
+            visual: .decor(stamp),
+            width: display.width,
+            foot: display.height,
+            anchorsBase: false,
+            pivot: screen
+        )
+    }
+
+    private func fadeTreesCoveringTheFarm(_ items: inout [MapDrawable]) {
+        let farm = items.filter { !$0.tall }.map { spriteRect($0) }
+        for index in items.indices where items[index].tall {
+            let rect = spriteRect(items[index])
+            if farm.contains(where: { $0.intersects(rect) }) {
+                items[index].opacity = 0.35
+            }
+        }
+    }
+
+    private func spriteRect(_ item: MapDrawable) -> CGRect {
+        let originY = item.anchorsBase ? item.point.y - item.foot : item.point.y - item.foot / 2
+        return CGRect(x: item.point.x - item.width / 2, y: originY, width: item.width, height: item.foot)
+    }
+
+    private func drawSprites(_ items: [MapDrawable], in context: GraphicsContext, size: CGSize) {
+        let view = CGRect(origin: .zero, size: size).insetBy(dx: -12, dy: -12)
+        var resolved: [String: GraphicsContext.ResolvedImage] = [:]
+        for item in items {
+            let rect = spriteRect(item)
+            guard rect.intersects(view) else { continue }
+            guard let name = spriteName(item.visual) else { continue }
+            if resolved[name] == nil, let image = FarmSprite.image(named: name) {
+                resolved[name] = context.resolve(Image(uiImage: image))
+            }
+            guard let image = resolved[name] else { continue }
+            let pivot = item.pivot ?? item.point
+            context.drawLayer { layer in
+                layer.opacity = item.opacity
+                if item.rotation != 0 || item.flipped {
+                    layer.translateBy(x: pivot.x, y: pivot.y)
+                    if item.rotation != 0 {
+                        layer.rotate(by: .radians(item.rotation))
+                    }
+                    if item.flipped {
+                        layer.scaleBy(x: -1, y: 1)
+                    }
+                    layer.translateBy(x: -pivot.x, y: -pivot.y)
+                }
+                layer.draw(image, in: rect)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func plantLabel(_ item: MapDrawable) -> some View {
+        if showsNames, case .plant(let info) = item.visual {
+            Text(info.name)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(OrchardColor.ink)
+                .lineLimit(1)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(.ultraThinMaterial, in: Capsule())
+                .fixedSize()
+                .position(x: item.point.x, y: (item.anchorsBase ? item.point.y : item.point.y + item.foot / 2) + 16)
+        }
+    }
+
+    private func shoreDrift(at date: Date) -> CGSize {
+        let time = date.timeIntervalSinceReferenceDate
+        return CGSize(width: CGFloat(time * 1.6), height: CGFloat(time * 1.2))
+    }
+
+    private func drawWater(in context: inout GraphicsContext, size: CGSize, drift: CGSize) {
+        if let ocean = FarmSprite.image(named: FarmSprite.waterOcean) {
+            let image = context.resolve(Image(uiImage: ocean))
+            context.drawLayer { layer in
+                drawWarped(image, layer: &layer, size: size, pixelsPerCell: 128, drift: drift)
+            }
+        } else {
+            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(FarmColor.ocean))
+        }
+        let bounds = visibleTileBounds(in: size, margin: 2)
+        let lakes = chart.lakes.union(chart.creek).filter { bounds.contains($0) }
+        guard !lakes.isEmpty, let lake = FarmSprite.image(named: FarmSprite.waterLake) else { return }
+        let image = context.resolve(Image(uiImage: lake))
+        context.drawLayer { layer in
+            layer.clip(to: diamondUnion(lakes, in: size), style: FillStyle(eoFill: false))
+            drawWarped(image, layer: &layer, size: size, pixelsPerCell: 128, drift: drift)
+        }
+    }
+
+    private func drawCliffs(in context: GraphicsContext, size: CGSize) {
+        let bounds = visibleTileBounds(in: size, margin: 3)
+        for tile in chart.ground where bounds.contains(tile) {
+            let south = FarmTile(column: tile.column, row: tile.row + 1)
+            let east = FarmTile(column: tile.column + 1, row: tile.row)
+            let facesSouth = isOcean(south)
+            let facesEast = isOcean(east)
+            let corners = IsoMap.corners(tile)
+            if facesSouth {
+                drawStamp(ShoreStamp.faceSW, at: corners[3], in: context, size: size)
+            }
+            if facesEast {
+                drawStamp(ShoreStamp.faceSE, at: corners[2], in: context, size: size)
+            }
+            if facesSouth && facesEast {
+                drawStamp(ShoreStamp.cornerS, at: corners[2], in: context, size: size)
+            }
+        }
+    }
+
+    private func drawFoam(in context: GraphicsContext, size: CGSize) {
+        guard let image = FarmSprite.image(named: FarmSprite.edgeFoam) else { return }
+        let resolved = context.resolve(Image(uiImage: image))
+        let drop = ShoreStamp.waterDrop(camera: camera.scale)
+        let bounds = visibleTileBounds(in: size, margin: 2)
+        for tile in chart.ground where bounds.contains(tile) {
+            for neighbor in Woodland.orthogonal(tile) where isOcean(neighbor) {
+                guard let edge = gridEdge(from: tile, toward: neighbor) else { continue }
+                drawEdgeStrip(resolved, edge: edge, owner: tile, kind: .path, in: context, size: size, drop: drop, fades: false, fraction: 0.25)
+            }
+        }
+    }
+
+    private func drawBanks(in context: GraphicsContext, size: CGSize) {
+        guard let grass = FarmSprite.image(named: FarmSprite.edgeBankGrass),
+              let sand = FarmSprite.image(named: FarmSprite.edgeBankSand) else { return }
+        let grassImage = context.resolve(Image(uiImage: grass))
+        let sandImage = context.resolve(Image(uiImage: sand))
+        let bounds = visibleTileBounds(in: size, margin: 2)
+        let water = chart.water
+        for tile in chart.ground where bounds.contains(tile) {
+            for neighbor in Woodland.orthogonal(tile) where water.contains(neighbor) {
+                guard let edge = gridEdge(from: tile, toward: neighbor) else { continue }
+                let image = Woodland.bankIsSand(seed: shoreSeed, edge: edge) ? sandImage : grassImage
+                drawEdgeStrip(image, edge: edge, owner: tile, kind: .path, in: context, size: size, fades: false, fraction: 0.22)
+            }
+        }
+    }
+
+    private func drawStamp(_ stamp: DecorSprite, at world: CGPoint, in context: GraphicsContext, size: CGSize) {
+        guard let image = FarmSprite.image(named: stamp.name) else { return }
+        let scale = ShoreStamp.pixelScale(camera.scale)
+        let display = CGSize(width: stamp.size.width * scale, height: stamp.size.height * scale)
+        let anchor = CGPoint(x: stamp.anchor.x * scale, y: stamp.anchor.y * scale)
+        let screen = camera.screenPoint(world, in: size)
+        let rect = CGRect(x: screen.x - anchor.x, y: screen.y - anchor.y, width: display.width, height: display.height)
+        context.draw(context.resolve(Image(uiImage: image)), in: rect)
+    }
+
+    private func isOcean(_ tile: FarmTile) -> Bool {
+        !chart.ground.contains(tile) && !chart.water.contains(tile)
+    }
+
+    private func gridEdge(from tile: FarmTile, toward neighbor: FarmTile) -> FarmGridEdge? {
+        let corners = IsoMap.corners(tile)
+        if neighbor.column == tile.column + 1 && neighbor.row == tile.row {
+            return FarmGridEdge(anchor: corners[2], end: corners[1], runsNorthEast: true)
+        }
+        if neighbor.column == tile.column - 1 && neighbor.row == tile.row {
+            return FarmGridEdge(anchor: corners[3], end: corners[0], runsNorthEast: true)
+        }
+        if neighbor.row == tile.row + 1 && neighbor.column == tile.column {
+            return FarmGridEdge(anchor: corners[2], end: corners[3], runsNorthEast: false)
+        }
+        if neighbor.row == tile.row - 1 && neighbor.column == tile.column {
+            return FarmGridEdge(anchor: corners[1], end: corners[0], runsNorthEast: false)
+        }
+        return nil
+    }
+
+    private func groundPath(in size: CGSize) -> Path {
+        let bounds = visibleTileBounds(in: size, margin: 2)
+        return diamondUnion(chart.ground.filter { bounds.contains($0) }, in: size)
+    }
+
     private func drawTerrains(in context: GraphicsContext, size: CGSize) {
-        let order: [FarmItemKind] = [.path, .dirt, .sand, .longgrass, .tilled]
+        let order: [FarmItemKind] = [.forest, .longgrass, .dirt, .sand, .path, .tilled]
         var fills: [(FarmItemKind, Set<FarmTile>)] = []
         for kind in order {
             let tiles = Set(terrain.compactMap { tile, painted in painted == kind ? tile : nil })
@@ -470,7 +733,13 @@ struct FarmMapView: View {
 
     /// One texture covers several cells, in world space, so its wrap does not sit on every cell edge.
     /// Tilled soil is 128 app pixels per cell (four furrows). The other grounds are 256.
-    private func drawWarped(_ image: GraphicsContext.ResolvedImage, layer: inout GraphicsContext, size: CGSize, pixelsPerCell: CGFloat) {
+    private func drawWarped(
+        _ image: GraphicsContext.ResolvedImage,
+        layer: inout GraphicsContext,
+        size: CGSize,
+        pixelsPerCell: CGFloat,
+        drift: CGSize = .zero
+    ) {
         let tile = IsoMap.tileWidth
         let zoom = camera.scale
         let span: CGFloat = 512
@@ -479,8 +748,8 @@ struct FarmMapView: View {
         let transform = CGAffineTransform(
             a: a, b: b,
             c: -a, d: b,
-            tx: size.width / 2 + camera.pan.width - camera.center.x * zoom,
-            ty: size.height / 2 + camera.pan.height - camera.center.y * zoom
+            tx: size.width / 2 + camera.pan.width - camera.center.x * zoom + drift.width,
+            ty: size.height / 2 + camera.pan.height - camera.center.y * zoom + drift.height
         )
         let inverse = transform.inverted()
         let corners = [
@@ -520,10 +789,15 @@ struct FarmMapView: View {
         owner: FarmTile,
         kind: FarmItemKind,
         in context: GraphicsContext,
-        size: CGSize
+        size: CGSize,
+        drop: CGFloat = 0,
+        fades: Bool = true,
+        fraction: CGFloat? = nil
     ) {
-        let start = camera.screenPoint(edge.anchor, in: size)
-        let finish = camera.screenPoint(edge.end, in: size)
+        var start = camera.screenPoint(edge.anchor, in: size)
+        var finish = camera.screenPoint(edge.end, in: size)
+        start.y += drop
+        finish.y += drop
         let dx = finish.x - start.x
         let dy = finish.y - start.y
         let length = max(hypot(dx, dy), 0.001)
@@ -535,8 +809,8 @@ struct FarmMapView: View {
         if outward.x * toward.x + outward.y * toward.y > 0 {
             outward = CGPoint(x: -outward.x, y: -outward.y)
         }
-        let fraction: CGFloat = kind == .longgrass ? 0.18 : 0.12
-        let height = IsoMap.tileWidth * fraction * camera.scale
+        let strip = fraction ?? (kind == .longgrass ? 0.18 : 0.12)
+        let height = IsoMap.tileWidth * strip * camera.scale
         let origin = CGPoint(x: start.x + outward.x * height, y: start.y + outward.y * height)
         let transform = CGAffineTransform(
             a: along.x, b: along.y,
@@ -546,16 +820,18 @@ struct FarmMapView: View {
         context.drawLayer { layer in
             layer.concatenate(transform)
             layer.draw(image, in: CGRect(x: 0, y: 0, width: length, height: height))
-            layer.blendMode = .destinationIn
-            let fade = Gradient(stops: [
-                .init(color: Color.white.opacity(0.15), location: 0),
-                .init(color: Color.white.opacity(0.85), location: 0.55),
-                .init(color: Color.white, location: 1)
-            ])
-            layer.fill(
-                Path(CGRect(x: 0, y: 0, width: length, height: height)),
-                with: .linearGradient(fade, startPoint: CGPoint(x: length / 2, y: 0), endPoint: CGPoint(x: length / 2, y: height))
-            )
+            if fades {
+                layer.blendMode = .destinationIn
+                let fade = Gradient(stops: [
+                    .init(color: Color.white.opacity(0.15), location: 0),
+                    .init(color: Color.white.opacity(0.85), location: 0.55),
+                    .init(color: Color.white, location: 1)
+                ])
+                layer.fill(
+                    Path(CGRect(x: 0, y: 0, width: length, height: height)),
+                    with: .linearGradient(fade, startPoint: CGPoint(x: length / 2, y: 0), endPoint: CGPoint(x: length / 2, y: height))
+                )
+            }
         }
     }
 
@@ -618,6 +894,11 @@ private struct MapDrawable: Identifiable {
     /// Height of the sprite whose base sits on the tile centre.
     var foot: CGFloat
     var anchorsBase: Bool
+    var rotation: Double = 0
+    var flipped: Bool = false
+    var opacity: Double = 1
+    var pivot: CGPoint? = nil
+    var tall: Bool = false
 }
 
 private enum MapVisual {
@@ -633,10 +914,13 @@ private enum MapVisual {
     case soilBed
     case emptyVine
     case plant(FarmPlantInfo)
+    case decor(DecorSprite)
 
     var anchorsBase: Bool {
         switch self {
         case .soilTree, .soilVine, .soilBed, .rail, .post:
+            return false
+        case .decor:
             return false
         case .plant(let info):
             return FarmExpansion.spotKind(zone: info.zone) != .bed
@@ -649,13 +933,22 @@ private enum MapVisual {
 private extension FarmItemKind {
     var depthBias: Double {
         switch self {
-        case .path, .dirt, .sand, .longgrass, .tilled: 0.1
+        case .path, .dirt, .sand, .longgrass, .tilled, .forest, .lake, .creek: 0.1
         case .fence: 0.2
-        case .bush, .rock: 0.3
+        case .bush, .rock, .cleared: 0.3
         case .plant: 0.4
         case .tractor: 0.5
         case .house: 0.6
         }
+    }
+}
+
+private struct TileBounds {
+    var columns: ClosedRange<Int>
+    var rows: ClosedRange<Int>
+
+    func contains(_ tile: FarmTile) -> Bool {
+        columns.contains(tile.column) && rows.contains(tile.row)
     }
 }
 
@@ -694,6 +987,8 @@ struct FenceStamp {
 enum FarmColor {
     /// Fresh lawn green, close to #7BC043.
     static let freshGrass = Color(red: 0.482, green: 0.753, blue: 0.263)
+    /// Ocean flat colour, close to #3FA7D6, used when the texture has not decoded.
+    static let ocean = Color(red: 0.247, green: 0.655, blue: 0.839)
 }
 
 struct IsoDiamond: Shape {

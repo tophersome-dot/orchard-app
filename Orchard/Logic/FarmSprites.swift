@@ -23,6 +23,13 @@ enum FarmSprite {
     static let edgeBed = "edge_bed"
     static let edgeSand = "edge_sand"
     static let edgeLonggrass = "edge_longgrass"
+    static let terrainForest = "forest_floor"
+    static let edgeForest = "edge_forest"
+    static let waterOcean = "water_ocean"
+    static let waterLake = "water_lake"
+    static let edgeFoam = "edge_foam"
+    static let edgeBankGrass = "edge_bank_grass"
+    static let edgeBankSand = "edge_bank_sand"
     static let fencePost = "fence_post"
     static let fenceRailNE = "fence_rail_ne"
     static let fenceRailNW = "fence_rail_nw"
@@ -61,6 +68,7 @@ enum FarmSprite {
         case .sand: terrainSand
         case .longgrass: terrainLonggrass
         case .tilled: terrainTilled
+        case .forest: terrainForest
         default: nil
         }
     }
@@ -72,6 +80,7 @@ enum FarmSprite {
         case .sand: edgeSand
         case .longgrass: edgeLonggrass
         case .tilled: edgeBed
+        case .forest: edgeForest
         default: nil
         }
     }

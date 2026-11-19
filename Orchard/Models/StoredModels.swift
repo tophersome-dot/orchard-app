@@ -207,6 +207,52 @@ final class FarmPlacement {
 }
 
 @Model
+final class FarmDecor {
+    var id: UUID
+    var sprite: String
+    var column: Int
+    var row: Int
+    var scale: Double
+    var flipped: Bool
+    var rotation: Double
+    var origin: String
+
+    init(id: UUID, sprite: String, column: Int, row: Int, scale: Double, flipped: Bool, rotation: Double, origin: String) {
+        self.id = id
+        self.sprite = sprite
+        self.column = column
+        self.row = row
+        self.scale = scale
+        self.flipped = flipped
+        self.rotation = rotation
+        self.origin = origin
+    }
+
+    var record: DecorRecord {
+        DecorRecord(
+            id: id,
+            sprite: sprite,
+            tile: FarmTile(column: column, row: row),
+            scale: scale,
+            flipped: flipped,
+            rotation: rotation,
+            origin: origin
+        )
+    }
+}
+
+@Model
+final class FarmWorld {
+    var seed: Int
+    var builtLevel: Int
+
+    init(seed: Int, builtLevel: Int = 0) {
+        self.seed = seed
+        self.builtLevel = builtLevel
+    }
+}
+
+@Model
 final class HuntItem {
     var id: UUID
     var addedAt: Date

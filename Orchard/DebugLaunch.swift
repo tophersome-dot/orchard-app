@@ -9,6 +9,29 @@ enum DebugLaunch {
         #endif
     }
 
+    /// Skip woodland decor and forest floor. The island, water, and cliffs still draw.
+    static var noWoods: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-noWoods")
+        #else
+        false
+        #endif
+    }
+
+    /// Overrides the collection level that sizes the island. Example: `-islandLevel 1`
+    static var islandLevel: Int? {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: "-islandLevel"), index + 1 < arguments.count else {
+            return nil
+        }
+        guard let value = Int(arguments[index + 1]) else { return nil }
+        return value
+        #else
+        return nil
+        #endif
+    }
+
     static var seedSampleTastings: Bool {
         #if DEBUG
         ProcessInfo.processInfo.arguments.contains("-seedSampleTastings")

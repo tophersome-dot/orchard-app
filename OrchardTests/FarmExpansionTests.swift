@@ -45,7 +45,23 @@ final class FarmExpansionTests: XCTestCase {
         XCTAssertTrue(FarmExpansion.canPlace(kind: .plant, spot: .tree, on: tree, tastedCount: 0, occupied: []))
         XCTAssertFalse(FarmExpansion.canPlace(kind: .plant, spot: .tree, on: bed, tastedCount: 0, occupied: []))
         XCTAssertFalse(FarmExpansion.canPlace(kind: .plant, spot: .bed, on: tree, tastedCount: 0, occupied: []))
-        XCTAssertFalse(FarmExpansion.canPlace(kind: .house, spot: nil, on: FarmTile(column: 17, row: 2), tastedCount: 0, occupied: []))
+        XCTAssertTrue(FarmExpansion.canPlace(kind: .house, spot: nil, on: FarmTile(column: 17, row: 2), tastedCount: 0, occupied: []))
+        XCTAssertFalse(FarmExpansion.canPlace(
+            kind: .house,
+            spot: nil,
+            on: FarmTile(column: 17, row: 2),
+            tastedCount: 0,
+            occupied: [],
+            water: [FarmTile(column: 17, row: 2)]
+        ))
+        XCTAssertTrue(FarmExpansion.canPlace(
+            kind: .plant,
+            spot: .tree,
+            on: FarmTile(column: 20, row: 4),
+            tastedCount: 0,
+            occupied: [],
+            openTiles: [FarmTile(column: 20, row: 4)]
+        ))
         XCTAssertTrue(FarmExpansion.canPlace(kind: .fence, spot: nil, on: FarmTile(column: 0, row: 3), tastedCount: 0, occupied: []))
     }
 

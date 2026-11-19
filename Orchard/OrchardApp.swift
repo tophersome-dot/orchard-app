@@ -17,7 +17,14 @@ struct OrchardApp: App {
 enum OrchardStore {
     static let container: ModelContainer = {
         do {
-            return try ModelContainer(for: Variety.self, Tasting.self, HuntItem.self, FarmPlacement.self)
+            return try ModelContainer(
+                for: Variety.self,
+                Tasting.self,
+                HuntItem.self,
+                FarmPlacement.self,
+                FarmDecor.self,
+                FarmWorld.self
+            )
         } catch {
             fatalError("Could not open the Orchard store: \(error)")
         }

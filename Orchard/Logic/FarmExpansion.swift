@@ -18,12 +18,21 @@ enum FarmItemKind: String, Equatable, CaseIterable {
     case tilled
     case bush
     case rock
+    case forest
+    case lake
+    case creek
+    /// Remembers that Chris cleared this cell, so the woods do not grow back.
+    case cleared
 
     var isTerrain: Bool {
         switch self {
-        case .path, .dirt, .sand, .longgrass, .tilled: true
-        case .house, .tractor, .plant, .fence, .bush, .rock: false
+        case .path, .dirt, .sand, .longgrass, .tilled, .forest, .lake, .creek: true
+        case .house, .tractor, .plant, .fence, .bush, .rock, .cleared: false
         }
+    }
+
+    var isWater: Bool {
+        self == .lake || self == .creek
     }
 }
 
@@ -184,11 +193,12 @@ enum FarmExpansion {
         )
     }
 
-    static func plan(records: [FarmRecord], zones: [String: String]) -> YardPlan {
+    static func plan(records: [FarmRecord], zones: [String: String], openTiles: Set<FarmTile> = []) -> YardPlan {
         var trees = 0
         var beds = 0
         var vines = 0
         for record in records where record.kind == .plant {
+            if openTiles.contains(record.tile) { continue }
             guard let id = record.varietyID, let zone = zones[id] else { continue }
             switch spotKind(zone: zone) {
             case .tree: trees += 1
@@ -197,6 +207,18 @@ enum FarmExpansion {
             }
         }
         return plan(treeCount: trees, bedCount: beds, vineCount: vines)
+    }
+
+    /// The farm yard that stays grass. Woods generate around it.
+    static func clearingTiles(for plan: YardPlan) -> Set<FarmTile> {
+        guard let home = plots(for: plan).first(where: { $0.id == "home" }) else { return [] }
+        var tiles = Set<FarmTile>()
+        for column in home.columns {
+            for row in home.rows {
+                tiles.insert(FarmTile(column: column, row: row))
+            }
+        }
+        return tiles
     }
 
     static func plots(for plan: YardPlan) -> [FarmPlotSpec] {
@@ -306,26 +328,33 @@ enum FarmExpansion {
         tastedCount: Int,
         occupied: Set<FarmTile>,
         reserved: Set<FarmTile> = [],
-        plan: YardPlan? = nil
+        plan: YardPlan? = nil,
+        water: Set<FarmTile> = [],
+        creek: Set<FarmTile> = [],
+        openTiles: Set<FarmTile> = []
     ) -> Bool {
         if kind == .house {
             let tiles = footprint(kind: .house, anchor: tile)
             return tiles.allSatisfy { candidate in
-                !occupied.contains(candidate) && !reserved.contains(candidate) && !isLocked(candidate, tastedCount: tastedCount)
+                !occupied.contains(candidate) && !reserved.contains(candidate) && !water.contains(candidate)
             }
         }
-        if occupied.contains(tile) || reserved.contains(tile) || isLocked(tile, tastedCount: tastedCount) {
+        if water.contains(tile) {
+            return kind == .path && creek.contains(tile)
+        }
+        if occupied.contains(tile) || reserved.contains(tile) {
             return false
         }
         switch kind {
         case .plant:
             guard let spot else { return false }
+            if openTiles.contains(tile) { return true }
             let tiles = plan.map { spots(kind: spot, plan: $0) } ?? spots(kind: spot, tastedCount: tastedCount)
             return tiles.contains(tile)
         case .tractor, .fence, .path, .dirt, .sand, .longgrass, .tilled, .bush, .rock:
             return true
-        case .house:
-            return true
+        case .house, .forest, .lake, .creek, .cleared:
+            return false
         }
     }
 
@@ -365,20 +394,62 @@ enum FarmExpansion {
 
     /// Places tasted varieties on the next free slot of their section, in row order.
     /// A yard that is still scattered, or too small for the plants, is rebuilt.
-    static func reconciled(_ records: [FarmRecord], tried: [(id: String, zone: String)], tastedCount: Int) -> [FarmRecord] {
-        let trees = tried.filter { spotKind(zone: $0.zone) == .tree }.count
-        let beds = tried.filter { spotKind(zone: $0.zone) == .bed }.count
-        let vines = tried.filter { spotKind(zone: $0.zone) == .vine }.count
-        let layout = plan(treeCount: trees, bedCount: beds, vineCount: vines)
-        if records.isEmpty || needsRelayout(records, tried: tried, plan: layout) {
-            return placeAll(tried, plan: layout)
+    /// Cleared cells are filled before the yard grows. `openTiles` empty keeps the original grid.
+    static func reconciled(
+        _ records: [FarmRecord],
+        tried: [(id: String, zone: String)],
+        tastedCount: Int,
+        openTiles: [FarmTile] = []
+    ) -> [FarmRecord] {
+        let openSet = Set(openTiles)
+        let zones = Dictionary(uniqueKeysWithValues: tried.map { ($0.id, $0.zone) })
+        let seated = Set(records.compactMap { record -> String? in
+            guard record.kind == .plant, let id = record.varietyID, openSet.contains(record.tile) else { return nil }
+            return id
+        })
+        var freeSeats = openTiles.filter { tile in
+            !records.contains { $0.kind == .plant && $0.tile == tile }
+        }
+        var gridTried: [(id: String, zone: String)] = []
+        for item in tried {
+            if seated.contains(item.id) { continue }
+            if !freeSeats.isEmpty && !records.contains(where: { $0.kind == .plant && $0.varietyID == item.id }) {
+                freeSeats.removeFirst()
+                continue
+            }
+            gridTried.append(item)
+        }
+        let layout = plan(
+            treeCount: gridTried.filter { spotKind(zone: $0.zone) == .tree }.count,
+            bedCount: gridTried.filter { spotKind(zone: $0.zone) == .bed }.count,
+            vineCount: gridTried.filter { spotKind(zone: $0.zone) == .vine }.count
+        )
+        let keptGround = records.filter { record in
+            switch record.kind {
+            case .forest, .lake, .creek, .cleared, .dirt, .sand, .longgrass, .tilled: true
+            default: false
+            }
+        }
+        if records.isEmpty || needsRelayout(records, tried: tried, plan: layout, openTiles: openSet) {
+            return placeAll(tried, plan: layout, openTiles: openTiles, zones: zones) + keptGround
         }
         let triedIDs = Set(tried.map(\.id))
         var next = records.filter { record in
             record.kind != .plant || (record.varietyID.map { triedIDs.contains($0) } ?? false)
         }
         var occupied = Set(next.map(\.tile))
+        var seats = openTiles
         for item in tried where !next.contains(where: { $0.kind == .plant && $0.varietyID == item.id }) {
+            if let index = seats.firstIndex(where: { seat in
+                !next.contains { record in
+                    record.tile == seat && record.kind != .cleared && record.kind != .forest && !record.kind.isWater
+                }
+            }) {
+                let tile = seats.remove(at: index)
+                next.append(FarmRecord(id: UUID(), kind: .plant, varietyID: item.id, tile: tile))
+                occupied.insert(tile)
+                continue
+            }
             let kind = spotKind(zone: item.zone)
             guard let tile = nextFreeSpot(kind: kind, plan: layout, occupied: occupied) else { continue }
             next.append(FarmRecord(id: UUID(), kind: .plant, varietyID: item.id, tile: tile))
@@ -392,7 +463,12 @@ enum FarmExpansion {
         return (count + perRow - 1) / perRow
     }
 
-    private static func needsRelayout(_ records: [FarmRecord], tried: [(id: String, zone: String)], plan: YardPlan) -> Bool {
+    private static func needsRelayout(
+        _ records: [FarmRecord],
+        tried: [(id: String, zone: String)],
+        plan: YardPlan,
+        openTiles: Set<FarmTile> = []
+    ) -> Bool {
         if let house = records.first(where: { $0.kind == .house }) {
             if house.tile == legacyHouseTile { return true }
         } else {
@@ -412,6 +488,7 @@ enum FarmExpansion {
         }
         for record in records where record.kind == .plant {
             guard let id = record.varietyID, let item = tried.first(where: { $0.id == id }) else { continue }
+            if openTiles.contains(record.tile) { continue }
             if !Set(plan.spots(spotKind(zone: item.zone))).contains(record.tile) {
                 return true
             }
@@ -419,11 +496,23 @@ enum FarmExpansion {
         return false
     }
 
-    private static func placeAll(_ tried: [(id: String, zone: String)], plan: YardPlan) -> [FarmRecord] {
+    private static func placeAll(
+        _ tried: [(id: String, zone: String)],
+        plan: YardPlan,
+        openTiles: [FarmTile] = [],
+        zones: [String: String] = [:]
+    ) -> [FarmRecord] {
         var next = records(for: plan)
         var occupied = Set(next.map(\.tile))
+        var seats = openTiles
         for item in tried {
-            let kind = spotKind(zone: item.zone)
+            if let index = seats.firstIndex(where: { !occupied.contains($0) }) {
+                let tile = seats.remove(at: index)
+                next.append(FarmRecord(id: UUID(), kind: .plant, varietyID: item.id, tile: tile))
+                occupied.insert(tile)
+                continue
+            }
+            let kind = zones[item.id].map { spotKind(zone: $0) } ?? spotKind(zone: item.zone)
             guard let tile = nextFreeSpot(kind: kind, plan: plan, occupied: occupied) else { continue }
             next.append(FarmRecord(id: UUID(), kind: .plant, varietyID: item.id, tile: tile))
             occupied.insert(tile)
