@@ -37,11 +37,73 @@ final class PlantHealthTests: XCTestCase {
         XCTAssertEqual(PlantHealth.from(rating: 9).scale, PlantHealth.from(rating: 5).scale)
     }
 
-    func testAutomaticOverallAveragesAllFourSlidersOntoHalfSteps() {
-        XCTAssertEqual(TasteScore.automatic(sweet: 3, tart: 3, crunch: 3, juicy: 3), 3)
-        XCTAssertEqual(TasteScore.automatic(sweet: 5, tart: 5, crunch: 5, juicy: 5), 5)
-        XCTAssertEqual(TasteScore.automatic(sweet: 0, tart: 0, crunch: 0, juicy: 0), 1)
-        XCTAssertEqual(TasteScore.automatic(sweet: 3.5, tart: 3.5, crunch: 3.5, juicy: 2.5), 3.5)
-        XCTAssertEqual(TasteScore.automatic(sweet: 4, tart: 4, crunch: 4, juicy: 3), 4)
+    func testEmptyProfileIsThePrior() {
+        let profile = TasteScore.profile(samples: [])
+        XCTAssertEqual(profile.sweet, 3.5)
+        XCTAssertEqual(profile.tart, 2.5)
+        XCTAssertEqual(profile.crunch, 4)
+        XCTAssertEqual(profile.juicy, 4)
+    }
+
+    func testLikedOverridesMoveTheProfileAndThePriorIsWorthThreeFours() {
+        let liked = TasteSample(sweet: 5, tart: 2, crunch: 4, juicy: 4, overall: 4, overallIsOverride: true)
+        let once = TasteScore.profile(samples: [liked])
+        XCTAssertEqual(once.sweet, 3.875, accuracy: 0.001)
+        XCTAssertEqual(once.tart, 2.375, accuracy: 0.001)
+        let thrice = TasteScore.profile(samples: [liked, liked, liked])
+        XCTAssertEqual(thrice.sweet, 4.25, accuracy: 0.001)
+        XCTAssertEqual(thrice.tart, 2.25, accuracy: 0.001)
+    }
+
+    func testAutoScoresAndLowRatingsDoNotTeachTheProfile() {
+        let prior = TasteScore.profile(samples: [])
+        let ignored = [
+            TasteSample(sweet: 0, tart: 0, crunch: 0, juicy: 0, overall: 5, overallIsOverride: false),
+            TasteSample(sweet: 1, tart: 5, crunch: 1, juicy: 1, overall: 2, overallIsOverride: true),
+            TasteSample(sweet: 1, tart: 5, crunch: 1, juicy: 1, overall: 2.5, overallIsOverride: true)
+        ]
+        let profile = TasteScore.profile(samples: ignored)
+        XCTAssertEqual(profile, prior)
+    }
+
+    func testAutomaticOverallIsAMatchNotAnAverage() {
+        let prior = TasteProfile.prior
+        XCTAssertEqual(
+            TasteScore.automatic(sweet: 3.5, tart: 2.5, crunch: 4, juicy: 4, profile: prior),
+            5
+        )
+        XCTAssertEqual(
+            TasteScore.automatic(sweet: 5, tart: 5, crunch: 4, juicy: 4, profile: prior),
+            3.5
+        )
+        XCTAssertEqual(
+            TasteScore.automatic(sweet: 0, tart: 5, crunch: 0, juicy: 0, profile: prior),
+            1.5
+        )
+        let opposite = TasteProfile(sweet: 0, tart: 0, crunch: 0, juicy: 0)
+        XCTAssertEqual(
+            TasteScore.automatic(sweet: 5, tart: 5, crunch: 5, juicy: 5, profile: opposite),
+            1
+        )
+    }
+
+    func testHintNamesTheBiggestGap() {
+        let prior = TasteProfile.prior
+        XCTAssertEqual(
+            TasteScore.hint(sweet: 3.5, tart: 2.5, crunch: 4, juicy: 4, profile: prior),
+            "Auto: close to your taste"
+        )
+        XCTAssertEqual(
+            TasteScore.hint(sweet: 3.5, tart: 5, crunch: 4, juicy: 4, profile: prior),
+            "Auto: tarter than you usually like"
+        )
+        XCTAssertEqual(
+            TasteScore.hint(sweet: 0, tart: 2.5, crunch: 4, juicy: 4, profile: prior),
+            "Auto: less sweet than you usually like"
+        )
+        XCTAssertEqual(
+            TasteScore.hint(sweet: 3.5, tart: 2.5, crunch: 0, juicy: 4, profile: prior),
+            "Auto: softer than you usually like"
+        )
     }
 }

@@ -80,6 +80,7 @@ struct CollectionScreen: View {
             Text("\(ProduceCategory.title(for: category)) \(triedCount) / \(inCategory.count)")
                 .font(OrchardFont.display(22))
                 .foregroundStyle(OrchardColor.ink)
+            tasteCard
             ScrollView {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 12) {
                     ForEach(inCategory) { variety in
@@ -151,7 +152,7 @@ struct CollectionScreen: View {
                 .lineLimit(2)
                 .minimumScaleFactor(0.7)
                 .multilineTextAlignment(.center)
-            if let score = variety.latestTasting?.scoreForDisplay {
+            if let score = variety.latestTasting?.scoreForDisplay(profile: tasteProfile) {
                 Text(String(format: "%.1f", score))
                     .font(OrchardFont.title(12))
                     .foregroundStyle(OrchardColor.score(score))
@@ -168,5 +169,45 @@ struct CollectionScreen: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color.black.opacity(tried ? 0.1 : 0.05), lineWidth: 1)
         )
+    }
+
+    private var tasteProfile: TasteProfile {
+        TasteScore.profile(from: varieties.flatMap(\.tastingList))
+    }
+
+    private var tasteCard: some View {
+        let profile = tasteProfile
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("Your taste")
+                .font(OrchardFont.title(14))
+                .foregroundStyle(OrchardColor.ink)
+            tasteBar("Sweet", value: profile.sweet, tint: Color(red: 0.95, green: 0.55, blue: 0.2))
+            tasteBar("Tart", value: profile.tart, tint: OrchardColor.leaf)
+            tasteBar("Crunch", value: profile.crunch, tint: OrchardColor.barn)
+            tasteBar("Juicy", value: profile.juicy, tint: Color(red: 0.2, green: 0.55, blue: 0.9))
+        }
+        .orchardCard()
+    }
+
+    private func tasteBar(_ title: String, value: Double, tint: Color) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(OrchardFont.caption(12))
+                .frame(width: 52, alignment: .leading)
+            Capsule()
+                .fill(OrchardColor.ink.opacity(0.08))
+                .overlay(alignment: .leading) {
+                    Capsule()
+                        .fill(tint)
+                        .scaleEffect(x: CGFloat(min(1, max(0, value / 5))), y: 1, anchor: .leading)
+                }
+                .frame(height: 8)
+            Text(String(format: "%.1f", value))
+                .font(OrchardFont.caption(12))
+                .frame(width: 28, alignment: .trailing)
+        }
+        .foregroundStyle(OrchardColor.ink)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title) \(String(format: "%.1f", value)) of 5")
     }
 }

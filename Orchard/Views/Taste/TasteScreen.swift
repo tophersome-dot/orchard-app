@@ -13,7 +13,7 @@ struct TasteScreen: View {
     @State private var tart = 3.0
     @State private var crunch = 3.0
     @State private var juicy = 3.0
-    @State private var overall = 3.0
+    @State private var overall = 4.5
     @State private var overallIsManual = false
     @State private var notes = ""
     @State private var image: UIImage?
@@ -49,19 +49,20 @@ struct TasteScreen: View {
                     HStack(spacing: 8) {
                         Text("Overall")
                             .font(OrchardFont.title(16))
+                        Spacer(minLength: 8)
                         if overallIsManual {
                             Button(action: resetOverall) {
                                 Label("Reset", systemImage: "arrow.uturn.backward")
                                     .font(OrchardFont.caption(12))
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("Reset overall to the slider average")
-                        } else {
-                            Label("Auto", systemImage: "sparkles")
-                                .font(OrchardFont.caption(12))
-                                .foregroundStyle(OrchardColor.grassDeep)
-                                .accessibilityLabel("Overall is the average of the sliders")
+                            .accessibilityLabel("Reset overall to your taste")
                         }
+                    }
+                    if !overallIsManual {
+                        Text(tasteHint)
+                            .font(OrchardFont.caption(13))
+                            .foregroundStyle(OrchardColor.grassDeep)
                     }
                     AppleScorePicker(score: $overall) {
                         overallIsManual = true
@@ -123,9 +124,13 @@ struct TasteScreen: View {
                 }
             }
         }
-        .onAppear(perform: applyDraft)
+        .onAppear {
+            applyDraft()
+            syncOverall()
+        }
         .onChange(of: router.draftSlug) { _, _ in applyDraft() }
         .onChange(of: sliderSignature) { _, _ in syncOverall() }
+        .onChange(of: profileSignature) { _, _ in syncOverall() }
     }
 
     private var photoCard: some View {
@@ -186,8 +191,21 @@ struct TasteScreen: View {
         return "\(ProduceCategory(rawValue: variety.categoryRaw)?.singular ?? "Variety") · \(variety.name)"
     }
 
+    private var tasteProfile: TasteProfile {
+        TasteScore.profile(from: varieties.flatMap(\.tastingList))
+    }
+
     private var automaticOverall: Double {
-        TasteScore.automatic(sweet: sweet, tart: tart, crunch: crunch, juicy: juicy)
+        TasteScore.automatic(sweet: sweet, tart: tart, crunch: crunch, juicy: juicy, profile: tasteProfile)
+    }
+
+    private var tasteHint: String {
+        TasteScore.hint(sweet: sweet, tart: tart, crunch: crunch, juicy: juicy, profile: tasteProfile)
+    }
+
+    private var profileSignature: String {
+        let profile = tasteProfile
+        return "\(profile.sweet)|\(profile.tart)|\(profile.crunch)|\(profile.juicy)"
     }
 
     private var sliderSignature: String {

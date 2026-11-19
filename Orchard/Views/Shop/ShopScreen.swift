@@ -7,9 +7,10 @@ struct ShopScreen: View {
     @FocusState private var focused: Bool
 
     private var results: (tried: [ShopHit], untried: [ShopHit]) {
+        let profile = TasteScore.profile(from: varieties.flatMap(\.tastingList))
         var latest: [String: TastingSnapshot] = [:]
         for variety in varieties {
-            if let snapshot = variety.snapshot() {
+            if let snapshot = variety.snapshot(profile: profile) {
                 latest[variety.slug] = snapshot
             }
         }

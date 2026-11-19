@@ -181,8 +181,13 @@ struct FarmScreen: View {
         varieties.filter(\.isTried).map(\.slug).sorted().joined(separator: "|")
     }
 
+    private var tasteProfile: TasteProfile {
+        TasteScore.profile(from: varieties.flatMap(\.tastingList))
+    }
+
     private var plants: [String: FarmPlantInfo] {
         guard scenery else { return [:] }
+        let profile = tasteProfile
         return Dictionary(uniqueKeysWithValues: varieties.map { variety in
             (variety.slug, FarmPlantInfo(
                 id: variety.slug,
@@ -191,7 +196,7 @@ struct FarmScreen: View {
                 category: variety.categoryRaw,
                 form: variety.form,
                 skin: variety.fruitSkin,
-                rating: variety.latestTasting?.scoreForDisplay
+                rating: variety.latestTasting?.scoreForDisplay(profile: profile)
             ))
         })
     }
@@ -1140,12 +1145,13 @@ struct FarmScreen: View {
             FarmSprite.fencePost, FarmSprite.fenceRailNE, FarmSprite.fenceRailNW,
             FarmSprite.house(HouseRules.progress(for: tastedCount).tier)
         ]
+        let profile = tasteProfile
         for variety in varieties where variety.isTried {
             names.append(FarmSprite.plantName(
                 zone: variety.zoneRaw,
                 category: variety.categoryRaw,
                 varietyID: variety.slug,
-                rating: variety.latestTasting?.scoreForDisplay
+                rating: variety.latestTasting?.scoreForDisplay(profile: profile)
             ))
         }
         names.append(contentsOf: Woodland.catalog.map(\.name))

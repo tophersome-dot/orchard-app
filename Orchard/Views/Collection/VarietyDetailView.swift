@@ -126,12 +126,20 @@ struct VarietyDetailView: View {
         }
     }
 
+    private var tasteProfile: TasteProfile {
+        TasteScore.profile(from: varieties.flatMap(\.tastingList))
+    }
+
+    private func displayed(_ tasting: Tasting) -> Double {
+        tasting.scoreForDisplay(profile: tasteProfile)
+    }
+
     private func ratingBlock(_ tasting: Tasting, count: Int) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(String(format: "%.1f", tasting.scoreForDisplay))
+                Text(String(format: "%.1f", displayed(tasting)))
                     .font(OrchardFont.display(36))
-                    .foregroundStyle(OrchardColor.score(tasting.scoreForDisplay))
+                    .foregroundStyle(OrchardColor.score(displayed(tasting)))
                 Text(count == 1 ? "latest taste" : "latest of \(count)")
                     .font(OrchardFont.caption(13))
                     .foregroundStyle(OrchardColor.ink.opacity(0.6))
@@ -254,9 +262,9 @@ struct VarietyDetailView: View {
                     Text(tasting.tastedAt.formatted(date: .abbreviated, time: .omitted))
                         .font(OrchardFont.title(14))
                     Spacer()
-                    Text(String(format: "%.1f", tasting.scoreForDisplay))
+                    Text(String(format: "%.1f", displayed(tasting)))
                         .font(OrchardFont.title(16))
-                        .foregroundStyle(OrchardColor.score(tasting.scoreForDisplay))
+                        .foregroundStyle(OrchardColor.score(displayed(tasting)))
                 }
                 if !tasting.notes.isEmpty {
                     Text(tasting.notes)

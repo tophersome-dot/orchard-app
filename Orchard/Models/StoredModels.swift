@@ -148,7 +148,7 @@ final class Tasting {
     var crunch: Double
     var juicy: Double
     var overall: Double
-    /// False when overall is the average of the sliders. Existing rows default to a manual score.
+    /// False when overall is the taste-match score. Existing rows default to a manual score.
     var overallIsOverride: Bool = true
     var notes: String
     @Attribute(.externalStorage) var photoData: Data?
@@ -183,10 +183,25 @@ final class Tasting {
         self.variety = variety
     }
 
-    /// Manual overall when Chris set one. Otherwise the live average of the sliders.
-    var scoreForDisplay: Double {
+    /// Manual overall when Chris set one. Otherwise how close the sliders are to his taste.
+    func scoreForDisplay(profile: TasteProfile) -> Double {
         if overallIsOverride { return overall }
-        return TasteScore.automatic(sweet: sweet, tart: tart, crunch: crunch, juicy: juicy)
+        return TasteScore.automatic(sweet: sweet, tart: tart, crunch: crunch, juicy: juicy, profile: profile)
+    }
+}
+
+extension TasteScore {
+    static func profile(from tastings: some Sequence<Tasting>) -> TasteProfile {
+        profile(samples: tastings.map { tasting in
+            TasteSample(
+                sweet: tasting.sweet,
+                tart: tasting.tart,
+                crunch: tasting.crunch,
+                juicy: tasting.juicy,
+                overall: tasting.overall,
+                overallIsOverride: tasting.overallIsOverride
+            )
+        })
     }
 }
 
@@ -401,10 +416,10 @@ extension Variety {
         )
     }
 
-    func snapshot() -> TastingSnapshot? {
+    func snapshot(profile: TasteProfile) -> TastingSnapshot? {
         guard let latest = latestTasting else { return nil }
         return TastingSnapshot(
-            overall: latest.scoreForDisplay,
+            overall: latest.scoreForDisplay(profile: profile),
             notes: latest.notes,
             sweet: latest.sweet,
             tart: latest.tart,
