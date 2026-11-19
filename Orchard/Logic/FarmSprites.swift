@@ -18,7 +18,9 @@ enum FarmSprite {
     static let terrainDirt = "terrain_dirt"
     static let terrainSand = "terrain_sand"
     static let terrainLonggrass = "terrain_longgrass"
+    static let terrainTilled = "terrain_tilled"
     static let edgeDirt = "edge_dirt"
+    static let edgeBed = "edge_bed"
     static let edgeSand = "edge_sand"
     static let edgeLonggrass = "edge_longgrass"
     static let fencePost = "fence_post"
@@ -48,8 +50,8 @@ enum FarmSprite {
         "tree_\(category)_\(varietyID)"
     }
 
-    static func bed(varietyID: String) -> String { "bed_\(varietyID)" }
-    static func vine(varietyID: String) -> String { "vine_\(varietyID)" }
+    static func crop(varietyID: String) -> String { "crop_\(varietyID)" }
+    static func arbor(varietyID: String) -> String { "vine_\(varietyID)_arbor" }
     static func fruit(varietyID: String) -> String { "fruit_\(varietyID)" }
 
     static func terrainFill(_ kind: FarmItemKind) -> String? {
@@ -58,6 +60,7 @@ enum FarmSprite {
         case .dirt: terrainDirt
         case .sand: terrainSand
         case .longgrass: terrainLonggrass
+        case .tilled: terrainTilled
         default: nil
         }
     }
@@ -68,7 +71,38 @@ enum FarmSprite {
         case .dirt: edgeDirt
         case .sand: edgeSand
         case .longgrass: edgeLonggrass
+        case .tilled: edgeBed
         default: nil
+        }
+    }
+
+    /// Ground-centre anchor inside the app-size PNG, from the beds v2 notes.
+    struct GroundAnchor {
+        var size: CGSize
+        var anchor: CGPoint
+    }
+
+    static func cropAnchor(varietyID: String) -> GroundAnchor {
+        switch varietyID {
+        case "purple-carrot":
+            GroundAnchor(size: CGSize(width: 116, height: 107), anchor: CGPoint(x: 58, y: 77))
+        case "yellow-carrot":
+            GroundAnchor(size: CGSize(width: 116, height: 97), anchor: CGPoint(x: 58, y: 67))
+        case "cherry-tomato":
+            GroundAnchor(size: CGSize(width: 116, height: 90), anchor: CGPoint(x: 58, y: 60.5))
+        default:
+            GroundAnchor(size: CGSize(width: 116, height: 97), anchor: CGPoint(x: 58, y: 67.5))
+        }
+    }
+
+    static func arborAnchor(varietyID: String) -> GroundAnchor {
+        switch varietyID {
+        case "cotton-candy":
+            GroundAnchor(size: CGSize(width: 135, height: 146), anchor: CGPoint(x: 67, y: 111))
+        case "cherry-tomato":
+            GroundAnchor(size: CGSize(width: 135, height: 144), anchor: CGPoint(x: 67, y: 109.5))
+        default:
+            GroundAnchor(size: CGSize(width: 135, height: 147), anchor: CGPoint(x: 67, y: 112))
         }
     }
 
@@ -143,8 +177,8 @@ enum FarmSprite {
         }
         switch FarmExpansion.spotKind(zone: zone) {
         case .tree: return tree(category: category, varietyID: varietyID)
-        case .bed: return bed(varietyID: varietyID)
-        case .vine: return vine(varietyID: varietyID)
+        case .bed: return crop(varietyID: varietyID)
+        case .vine: return arbor(varietyID: varietyID)
         }
     }
 }

@@ -12,6 +12,7 @@ private enum FarmTool: Hashable {
         .paint(.dirt),
         .paint(.sand),
         .paint(.longgrass),
+        .paint(.tilled),
         .paint(nil)
     ]
 
@@ -26,6 +27,7 @@ private enum FarmTool: Hashable {
         case .paint(.dirt): "icon_terrain_dirt"
         case .paint(.sand): "icon_terrain_sand"
         case .paint(.longgrass): "icon_terrain_longgrass"
+        case .paint(.tilled): "terrain_tilled"
         case .paint(.path): "icon_terrain_path"
         case .paint(nil): "icon_terrain_grass"
         case .paint(_): "icon_terrain_grass"
@@ -246,6 +248,17 @@ struct FarmScreen: View {
         for record in displayRecords where record.kind.isTerrain {
             map[record.tile] = record.kind
         }
+        if let dragging, let hover, let moving = records.first(where: { $0.id == dragging }), moving.kind == .plant,
+           let variety = moving.varietyID, let info = plants[variety] {
+            let spot = FarmExpansion.spotKind(zone: info.zone)
+            if spot == .bed || spot == .vine, map[moving.tile] == .tilled {
+                map[moving.tile] = nil
+                map[hover] = .tilled
+            }
+        }
+        for tile in yardPlan.bedSpots where map[tile] == nil && !paintStroke.keys.contains(tile) {
+            map[tile] = .tilled
+        }
         for (tile, painted) in paintStroke {
             if let painted {
                 map[tile] = painted
@@ -390,10 +403,22 @@ struct FarmScreen: View {
                 lastOffset = offset
                 saveCamera()
             } else if gesture == .moveItem {
-                if hoverValid, let hover, let dragging, records.first(where: { $0.id == dragging })?.tile != hover {
+                if hoverValid, let hover, let dragging, let moving = records.first(where: { $0.id == dragging }), moving.tile != hover {
+                    let carried = moving.kind == .plant ? plants[moving.varietyID ?? ""] : nil
+                    let spot = carried.map { FarmExpansion.spotKind(zone: $0.zone) }
                     commit { records in
                         guard let index = records.firstIndex(where: { $0.id == dragging }) else { return }
+                        let origin = records[index].tile
                         records[index].tile = hover
+                        guard spot == .bed || spot == .vine else { return }
+                        let destinationHasSoil = records.contains { $0.kind == .tilled && $0.tile == hover }
+                        if destinationHasSoil {
+                            records.removeAll { $0.kind == .tilled && $0.tile == origin }
+                        } else if let soil = records.firstIndex(where: { $0.kind == .tilled && $0.tile == origin }) {
+                            records[soil].tile = hover
+                        } else {
+                            records.append(FarmRecord(id: UUID(), kind: .tilled, varietyID: nil, tile: hover))
+                        }
                     }
                 }
             } else if gesture == .place {
@@ -561,7 +586,8 @@ struct FarmScreen: View {
             FarmSprite.grass, FarmSprite.tractor, FarmSprite.bush, FarmSprite.rock,
             FarmSprite.sapling, FarmSprite.soilTree, FarmSprite.soilVine, FarmSprite.emptyBed,
             FarmSprite.pathTexture, FarmSprite.pathEdge, FarmSprite.terrainDirt, FarmSprite.terrainSand,
-            FarmSprite.terrainLonggrass, FarmSprite.edgeDirt, FarmSprite.edgeSand, FarmSprite.edgeLonggrass,
+            FarmSprite.terrainLonggrass, FarmSprite.terrainTilled, FarmSprite.edgeDirt, FarmSprite.edgeSand,
+            FarmSprite.edgeLonggrass, FarmSprite.edgeBed,
             FarmSprite.fencePost, FarmSprite.fenceRailNE, FarmSprite.fenceRailNW,
             FarmSprite.house(HouseRules.progress(for: tastedCount).tier)
         ]

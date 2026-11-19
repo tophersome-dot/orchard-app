@@ -118,9 +118,9 @@ The approved sprite pack is in `Assets.xcassets`, one universal imageset per nam
 | `tree_<category>_<varietyId>` | A tree, for example `tree_apple_pink-lady` |
 | `tree_wilting` | Any tree rated below 2.5 |
 | `tree_sapling` | An empty orchard spot |
-| `bed_empty` | An empty soil bed |
-| `bed_<varietyId>` | A planted bed, for example `bed_dutch-carrot` |
-| `vine_<varietyId>` | A trellis or greenhouse crop, for example `vine_cherry-tomato` |
+| `terrain_tilled`, `edge_bed` | Merged bed soil and its outer lip |
+| `crop_<varietyId>` | Vegetables on a tilled cell, for example `crop_dutch-carrot` |
+| `vine_<varietyId>_arbor` | A trellis with no base slab, for example `vine_cherry-tomato_arbor` |
 | `path_texture`, `terrain_dirt`, `terrain_sand`, `terrain_longgrass` | Continuous ground, warped into the iso grid |
 | `path_edge_texture`, `edge_dirt`, `edge_sand`, `edge_longgrass` | Fringe on a terrain boundary |
 | `fence_post`, `fence_rail_ne`, `fence_rail_nw` | Fence posts and the two rail directions |

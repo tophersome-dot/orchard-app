@@ -15,12 +15,13 @@ enum FarmItemKind: String, Equatable, CaseIterable {
     case dirt
     case sand
     case longgrass
+    case tilled
     case bush
     case rock
 
     var isTerrain: Bool {
         switch self {
-        case .path, .dirt, .sand, .longgrass: true
+        case .path, .dirt, .sand, .longgrass, .tilled: true
         case .house, .tractor, .plant, .fence, .bush, .rock: false
         }
     }
@@ -321,7 +322,7 @@ enum FarmExpansion {
             guard let spot else { return false }
             let tiles = plan.map { spots(kind: spot, plan: $0) } ?? spots(kind: spot, tastedCount: tastedCount)
             return tiles.contains(tile)
-        case .tractor, .fence, .path, .dirt, .sand, .longgrass, .bush, .rock:
+        case .tractor, .fence, .path, .dirt, .sand, .longgrass, .tilled, .bush, .rock:
             return true
         case .house:
             return true

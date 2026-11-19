@@ -53,8 +53,12 @@ final class FarmExpansionTests: XCTestCase {
         XCTAssertEqual(FarmSprite.house(.shed), "house_1_shed")
         XCTAssertEqual(FarmSprite.house(.homestead), "house_4_homestead")
         XCTAssertEqual(FarmSprite.tree(category: "apple", varietyID: "pink-lady"), "tree_apple_pink-lady")
-        XCTAssertEqual(FarmSprite.bed(varietyID: "dutch-carrot"), "bed_dutch-carrot")
-        XCTAssertEqual(FarmSprite.vine(varietyID: "cherry-tomato"), "vine_cherry-tomato")
+        XCTAssertEqual(FarmSprite.crop(varietyID: "dutch-carrot"), "crop_dutch-carrot")
+        XCTAssertEqual(FarmSprite.arbor(varietyID: "cherry-tomato"), "vine_cherry-tomato_arbor")
+        XCTAssertEqual(
+            FarmSprite.plantName(zone: "bed", category: "vegetable", varietyID: "dutch-carrot", rating: 4),
+            "crop_dutch-carrot"
+        )
         XCTAssertEqual(FarmSprite.fruit(varietyID: "fuji"), "fruit_fuji")
         XCTAssertEqual(
             FarmSprite.plantName(zone: "orchard", category: "apple", varietyID: "granny-smith", rating: 2),

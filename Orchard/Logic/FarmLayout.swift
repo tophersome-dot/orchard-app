@@ -16,6 +16,45 @@ enum FarmLayout {
         if DebugLaunch.demoTerrain {
             try ensureDemoTerrain(in: context)
         }
+        try ensureTilledBeds(in: context, zones: Dictionary(uniqueKeysWithValues: tried.map { ($0.id, $0.zone) }))
+    }
+
+    /// Bed spots and planted vines sit on one tilled-soil layer.
+    @MainActor
+    private static func ensureTilledBeds(in context: ModelContext, zones: [String: String]) throws {
+        let existing = try context.fetch(FetchDescriptor<FarmPlacement>())
+        let records = existing.map(\.record)
+        var trees = 0
+        var beds = 0
+        var vines = 0
+        var planted: [FarmTile] = []
+        for record in records where record.kind == .plant {
+            guard let id = record.varietyID, let zone = zones[id] else { continue }
+            switch FarmExpansion.spotKind(zone: zone) {
+            case .tree: trees += 1
+            case .bed:
+                beds += 1
+                planted.append(record.tile)
+            case .vine:
+                vines += 1
+                planted.append(record.tile)
+            }
+        }
+        let plan = FarmExpansion.plan(treeCount: trees, bedCount: beds, vineCount: vines)
+        var wanted = Set(plan.bedSpots)
+        wanted.formUnion(planted)
+        let tilled = Set(records.filter { $0.kind == .tilled }.map(\.tile))
+        var changed = false
+        for tile in wanted where !tilled.contains(tile) {
+            if let other = existing.first(where: { $0.record.kind.isTerrain && $0.column == tile.column && $0.row == tile.row }) {
+                context.delete(other)
+            }
+            context.insert(FarmPlacement(id: UUID(), kindRaw: FarmItemKind.tilled.rawValue, varietySlug: nil, column: tile.column, row: tile.row))
+            changed = true
+        }
+        if changed {
+            try context.save()
+        }
     }
 
     /// A few painted cells beside the yard, for screenshots of edit mode.
